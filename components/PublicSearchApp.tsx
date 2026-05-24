@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { countries } from "@/lib/countries";
 import { moderateSearch } from "@/lib/moderation";
+import { openPlatformLink } from "@/lib/open-platform-link";
 import {
   generateSearchLinks,
   SearchResultLink,
@@ -75,6 +76,8 @@ const fadeUp = {
   visible: { opacity: 1, y: 0 }
 };
 
+const brandLogo = "/brand/nitaaq-logo.png";
+
 function ResultSkeleton() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -95,6 +98,10 @@ function ResultCard({ link, index }: { link: SearchResultLink; index: number }) 
       className="group relative overflow-hidden rounded-3xl border border-white/60 bg-white/78 p-5 shadow-soft transition duration-300 hover:-translate-y-1 hover:shadow-glow focus-ring dark:border-white/10 dark:bg-white/10"
       href={link.url}
       initial={{ opacity: 0, y: 20 }}
+      onClick={(event) => {
+        event.preventDefault();
+        openPlatformLink(link.platform, link.url, link.appUrl, link.intentUrl);
+      }}
       rel="noopener noreferrer"
       target="_blank"
       transition={{ delay: index * 0.035, duration: 0.35 }}
@@ -191,7 +198,12 @@ export function PublicSearchApp() {
   function openAllResults() {
     results.forEach((result, index) => {
       window.setTimeout(() => {
-        window.open(result.url, "_blank", "noopener,noreferrer");
+        openPlatformLink(
+          result.platform,
+          result.url,
+          result.appUrl,
+          result.intentUrl
+        );
       }, index * 120);
     });
   }
@@ -220,15 +232,19 @@ export function PublicSearchApp() {
     <main className="min-h-screen overflow-hidden">
       <nav className="mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
         <a className="flex items-center gap-3 focus-ring" href="#top">
-          <span className="grid size-11 place-items-center rounded-2xl bg-slate-950 text-white shadow-glow dark:bg-white dark:text-slate-950">
-            <ShieldCheck className="size-5" />
+          <span className="grid size-12 place-items-center rounded-2xl bg-white/75 p-1.5 shadow-glow ring-1 ring-white/70 dark:bg-white/10 dark:ring-white/10">
+            <img
+              alt="شعار نطاق"
+              className="size-full rounded-xl object-contain"
+              src={brandLogo}
+            />
           </span>
           <span>
             <span className="block text-sm font-black text-slate-950 dark:text-white">
-              Public Search Center
+              نطاق | الباحث العام
             </span>
             <span className="block text-xs text-slate-500 dark:text-slate-400">
-              بحث عام يحترم الخصوصية
+              منصة بحث عامة وآمنة
             </span>
           </span>
         </a>
@@ -253,6 +269,23 @@ export function PublicSearchApp() {
           initial="hidden"
           transition={{ staggerChildren: 0.08 }}
         >
+          <motion.div className="mb-6 flex items-center gap-4" variants={fadeUp}>
+            <span className="grid size-20 place-items-center rounded-[1.6rem] bg-white/80 p-2 shadow-glow ring-1 ring-white/70 dark:bg-white/10 dark:ring-white/10">
+              <img
+                alt="شعار نطاق"
+                className="size-full rounded-2xl object-contain"
+                src={brandLogo}
+              />
+            </span>
+            <div>
+              <p className="text-sm font-black text-emerald-700 dark:text-emerald-300">
+                نطاق
+              </p>
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                الباحث العام
+              </p>
+            </div>
+          </motion.div>
           <motion.div
             className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200"
             variants={fadeUp}
@@ -264,14 +297,14 @@ export function PublicSearchApp() {
             className="mt-7 max-w-3xl text-5xl font-black leading-[1.12] tracking-normal text-slate-950 dark:text-white sm:text-6xl lg:text-7xl"
             variants={fadeUp}
           >
-            مركز البحث العام الذكي
+            نطاق | الباحث العام
           </motion.h1>
           <motion.p
             className="mt-6 max-w-2xl text-lg leading-9 text-slate-700 dark:text-slate-300 sm:text-xl"
             variants={fadeUp}
           >
-            أداة عربية تساعدك على فتح نتائج البحث العامة من عدة منصات بسرعة،
-            بطريقة آمنة ومنظمة وبدون تخزين بياناتك.
+            منصة بحث عامة ذكية وآمنة تساعدك على فتح نتائج البحث العامة عبر عدة
+            منصات بطريقة احترافية ومنظمة.
           </motion.p>
           <motion.div
             className="mt-8 flex flex-wrap items-center gap-3"
@@ -485,6 +518,9 @@ export function PublicSearchApp() {
                   <p className="mt-1 text-sm leading-7 text-slate-500 dark:text-slate-400">
                     روابط خارجية آمنة تفتح في تبويبات جديدة.
                   </p>
+                  <p className="mt-2 max-w-xl text-xs font-semibold leading-6 text-emerald-700 dark:text-emerald-300">
+                    سيتم فتح النتائج في التطبيق الرسمي عند توفره، أو في المتصفح كخيار احتياطي.
+                  </p>
                 </div>
                 <button
                   className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black text-white shadow-glow transition hover:-translate-y-1 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -604,7 +640,14 @@ export function PublicSearchApp() {
 
       <footer className="px-5 py-8 sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 border-t border-slate-200/70 pt-8 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400 sm:flex-row sm:items-center">
-          <p>© 2026 Public Search Center. جميع الحقوق محفوظة.</p>
+          <div className="flex items-center gap-3">
+            <img
+              alt="شعار نطاق"
+              className="size-9 rounded-xl object-contain"
+              src={brandLogo}
+            />
+            <p>© 2026 نطاق | الباحث العام. جميع الحقوق محفوظة.</p>
+          </div>
           <p>مصمم كأداة بحث عامة آمنة لا تخزن عمليات البحث.</p>
         </div>
       </footer>

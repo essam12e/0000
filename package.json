@@ -1,8 +1,8 @@
 {
-  "name": "public-search-center",
+  "name": "nitaaq-public-search",
   "version": "1.0.0",
   "private": true,
-  "description": "Arabic privacy-friendly public search launcher built with Next.js.",
+  "description": "نطاق | الباحث العام - منصة بحث عامة ذكية وآمنة مبنية باستخدام Next.js.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vercel/analytics": "latest",
+    "@vercel/analytics": "^2.0.1",
     "framer-motion": "latest",
     "lucide-react": "latest",
     "next": "latest",

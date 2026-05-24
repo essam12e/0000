@@ -1,6 +1,6 @@
-# Public Search Center
+# نطاق | الباحث العام
 
-مركز البحث العام الذكي هو تطبيق عربي RTL مبني بـ Next.js لإنشاء روابط بحث عامة وآمنة عبر منصات مثل Google وYouTube وTikTok وX وFacebook وGitHub وReddit وغيرها، بدون تخزين عمليات البحث وبدون إرسال قيمة البحث إلى أي backend خاص بالموقع.
+منصة بحث عامة ذكية وآمنة تساعدك على فتح نتائج البحث العامة عبر عدة منصات بطريقة احترافية ومنظمة. الواجهة عربية بالكامل، تدعم RTL، وتحترم الخصوصية لأن قيم البحث لا تُرسل إلى backend خاص بالمشروع ولا يتم تخزينها.
 
 ## المميزات
 
@@ -12,9 +12,23 @@
 - محدد رموز اتصال دولي شامل عند إدخال رقم محلي.
 - زر فتح كل النتائج، نسخ كل الروابط، ومسح البحث.
 - وضع فاتح وداكن.
-- SEO عربي، Open Graph، Twitter cards، sitemap، robots.
+- SEO عربي، Open Graph، Twitter cards، sitemap، robots، وصورة مشاركة اجتماعية.
 - PWA قابلة للتثبيت مع manifest وservice worker بسيط.
 - Vercel Analytics مفعلة عبر `@vercel/analytics/react`.
+
+## الهوية والمشاركة الاجتماعية
+
+تم استخدام شعار نطاق الرسمي في:
+
+- شريط التنقل.
+- قسم Hero.
+- شاشة التحميل.
+- التذييل.
+- favicon وApple touch icon.
+- أيقونات PWA.
+- صورة المشاركة الاجتماعية `public/brand/social-preview.png`.
+
+عند مشاركة الرابط على WhatsApp أو X أو Discord أو Telegram أو Facebook أو LinkedIn، تعتمد المعاينة على بيانات Open Graph وTwitter cards في `app/layout.tsx`.
 
 ## الخصوصية والسلامة
 
@@ -53,7 +67,21 @@ npm run build
 
 ## ملاحظات Vercel Analytics
 
-تم تثبيت `@vercel/analytics` وإضافة `<Analytics />` في `app/layout.tsx`. ستبدأ التحليلات بالعمل بعد النشر على Vercel. قد تحتاج إلى زيارة لوحة المشروع في Vercel للتأكد من تفعيل تبويب Analytics حسب إعدادات حسابك.
+تم تثبيت `@vercel/analytics` وإضافة `<Analytics />` مرة واحدة داخل `app/layout.tsx` حتى يعمل عالميًا على كل الصفحات بعد النشر على Vercel. في بيئة التطوير ستظهر رسائل debug فقط ولن تُرسل مشاهدات فعلية، وهذا سلوك طبيعي من Vercel Analytics.
+
+## إعداد رابط الإنتاج للمعاينات
+
+يستخدم المشروع `NEXT_PUBLIC_SITE_URL` إن وُجد لتكوين الروابط المطلقة في metadata. بعد معرفة رابط Vercel النهائي، يمكنك إضافته في إعدادات Vercel:
+
+```text
+NEXT_PUBLIC_SITE_URL=https://your-domain.vercel.app
+```
+
+إذا لم تضفه، سيستخدم المشروع الرابط الافتراضي:
+
+```text
+https://nitaaq-public-search.vercel.app
+```
 
 ## رفع المشروع إلى GitHub
 
@@ -62,7 +90,7 @@ npm run build
 ```bash
 git init
 git add .
-git commit -m "Initial public search center"
+git commit -m "Initial nitaaq public search"
 git branch -M main
 git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
 git push -u origin main
@@ -77,6 +105,6 @@ npm run build
 npm run start
 ```
 
-## لا توجد متغيرات بيئة مطلوبة
+## متغيرات البيئة
 
-لا يحتاج المشروع إلى مفاتيح سرية أو ملفات `.env` للتشغيل الأساسي، لأنه لا يستخدم backend ولا يخزن عمليات البحث.
+لا يحتاج المشروع إلى مفاتيح سرية أو ملفات `.env` للتشغيل الأساسي. متغير `NEXT_PUBLIC_SITE_URL` اختياري لتحسين دقة روابط المشاركة الاجتماعية بعد النشر.

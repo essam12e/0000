@@ -1,5 +1,12 @@
-const CACHE_NAME = "public-search-center-v1";
-const APP_SHELL = ["/", "/manifest.json", "/icon-192.svg", "/icon-512.svg"];
+const CACHE_NAME = "nitaaq-public-search-v1";
+const APP_SHELL = [
+  "/",
+  "/manifest.json",
+  "/brand/nitaaq-logo.png",
+  "/brand/icon-192.png",
+  "/brand/icon-512.png",
+  "/brand/social-preview.png"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

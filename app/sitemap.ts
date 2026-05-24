@@ -1,9 +1,12 @@
 import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://nitaaq-public-search.vercel.app";
+
   return [
     {
-      url: "https://public-search-center.vercel.app",
+      url: siteUrl,
       lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 1

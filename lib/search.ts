@@ -1,13 +1,17 @@
 import { sanitizeInput } from "@/lib/moderation";
+import type { PlatformId } from "@/lib/open-platform-link";
 import { formatPhoneNumber } from "@/lib/phone";
 
 export type SearchType = "name" | "username" | "email" | "phone";
 
 export type SearchResultLink = {
   id: string;
+  platform: PlatformId;
   title: string;
   description: string;
   url: string;
+  appUrl?: string;
+  intentUrl?: string;
   accent: string;
 };
 
@@ -58,6 +62,155 @@ function usernameQuery(value: string) {
   return value.replace(/^@+/, "");
 }
 
+type RawSearchResultLink = Omit<
+  SearchResultLink,
+  "platform" | "appUrl" | "intentUrl"
+> & {
+  platform?: PlatformId;
+};
+
+function androidIntentUrl(webUrl: string, packageName: string): string {
+  const parsed = new URL(webUrl);
+  return `intent://${parsed.host}${parsed.pathname}${parsed.search}#Intent;scheme=${parsed.protocol.replace(
+    ":",
+    ""
+  )};package=${packageName};S.browser_fallback_url=${encodeURIComponent(
+    webUrl
+  )};end`;
+}
+
+function androidAppIntentUrl(
+  appPath: string,
+  scheme: string,
+  packageName: string,
+  webUrl: string
+): string {
+  return `intent://${appPath}#Intent;scheme=${scheme};package=${packageName};S.browser_fallback_url=${encodeURIComponent(
+    webUrl
+  )};end`;
+}
+
+function platformLinks(
+  platform: PlatformId,
+  webUrl: string,
+  query: string,
+  cleanUsername: string,
+  type: SearchType
+): Pick<SearchResultLink, "appUrl" | "intentUrl"> {
+  const encodedQuery = encodeURIComponent(query);
+  const encodedUsername = encodeURIComponent(cleanUsername);
+
+  switch (platform) {
+    case "youtube":
+      return {
+        appUrl: `youtube://www.youtube.com/results?search_query=${encodedQuery}`,
+        intentUrl: androidIntentUrl(webUrl, "com.google.android.youtube")
+      };
+    case "tiktok":
+      return {
+        appUrl: `snssdk1233://search?keyword=${encodedQuery}`,
+        intentUrl: androidIntentUrl(webUrl, "com.zhiliaoapp.musically")
+      };
+    case "x":
+      return {
+        appUrl: `twitter://search?query=${encodedQuery}`,
+        intentUrl: androidIntentUrl(webUrl, "com.twitter.android")
+      };
+    case "facebook":
+      return {
+        appUrl: `fb://search/top/?q=${encodedQuery}`,
+        intentUrl: androidAppIntentUrl(
+          `search/top/?q=${encodedQuery}`,
+          "fb",
+          "com.facebook.katana",
+          webUrl
+        )
+      };
+    case "instagram":
+      return {
+        appUrl:
+          type === "username"
+            ? `instagram://user?username=${encodedUsername}`
+            : `instagram://search?query=${encodedQuery}`,
+        intentUrl: androidAppIntentUrl(
+          type === "username"
+            ? `user?username=${encodedUsername}`
+            : `search?query=${encodedQuery}`,
+          "instagram",
+          "com.instagram.android",
+          webUrl
+        )
+      };
+    case "linkedin":
+      return {
+        appUrl: `linkedin://search/results/all?keywords=${encodedQuery}`,
+        intentUrl: androidAppIntentUrl(
+          `search/results/all?keywords=${encodedQuery}`,
+          "linkedin",
+          "com.linkedin.android",
+          webUrl
+        )
+      };
+    case "github":
+      return {
+        appUrl: `github://search?q=${encodedQuery}`,
+        intentUrl: androidIntentUrl(webUrl, "com.github.android")
+      };
+    case "reddit":
+      return {
+        appUrl: `reddit://search?q=${encodedQuery}`,
+        intentUrl: androidIntentUrl(webUrl, "com.reddit.frontpage")
+      };
+    case "snapchat":
+      return {
+        appUrl:
+          type === "username"
+            ? `snapchat://add/${encodedUsername}`
+            : `snapchat://search?query=${encodedQuery}`,
+        intentUrl: androidAppIntentUrl(
+          type === "username"
+            ? `add/${encodedUsername}`
+            : `search?query=${encodedQuery}`,
+          "snapchat",
+          "com.snapchat.android",
+          webUrl
+        )
+      };
+    case "telegram":
+      return {
+        appUrl:
+          type === "username"
+            ? `tg://resolve?domain=${encodedUsername}`
+            : `tg://search?query=${encodedQuery}`,
+        intentUrl: androidAppIntentUrl(
+          type === "username"
+            ? `resolve?domain=${encodedUsername}`
+            : `search?query=${encodedQuery}`,
+          "tg",
+          "org.telegram.messenger",
+          webUrl
+        )
+      };
+    default:
+      return {};
+  }
+}
+
+function enrichLink(
+  link: RawSearchResultLink,
+  query: string,
+  cleanUsername: string,
+  type: SearchType
+): SearchResultLink {
+  const platform = link.platform ?? (link.id as PlatformId);
+
+  return {
+    ...link,
+    platform,
+    ...platformLinks(platform, link.url, query, cleanUsername, type)
+  };
+}
+
 function validateByType(value: string, type: SearchType): string | null {
   if (!value) {
     return "أدخل قيمة البحث أولًا.";
@@ -87,7 +240,7 @@ function buildCommonLinks(query: string, type: SearchType): SearchResultLink[] {
   const quoted = type === "email" ? `"${query}"` : query;
   const socialHint = typeLabels[type];
 
-  return [
+  const links: RawSearchResultLink[] = [
     {
       id: "google",
       title: "Google Search",
@@ -196,6 +349,8 @@ function buildCommonLinks(query: string, type: SearchType): SearchResultLink[] {
       accent: "from-sky-500 to-blue-500"
     }
   ];
+
+  return links.map((link) => enrichLink(link, query, cleanUsername, type));
 }
 
 function buildPhoneLinks(
@@ -218,17 +373,28 @@ function buildPhoneLinks(
     ),
     {
       id: "whatsapp",
+      platform: "whatsapp",
       title: "WhatsApp",
       description: "فتح رابط واتساب مباشر للرقم فقط",
       url: ensureSafeUrl(`https://wa.me/${waNumber}`),
+      appUrl: `whatsapp://send?phone=${waNumber}`,
+      intentUrl: `intent://send?phone=${waNumber}#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${encodeURIComponent(
+        `https://wa.me/${waNumber}`
+      )};end`,
       accent: "from-green-500 to-emerald-600"
     },
     {
       id: "truecaller",
+      platform: "truecaller",
       title: "Truecaller",
       description: "رابط بحث خارجي عام إن كان متاحًا",
       url: ensureSafeUrl(
         `https://www.truecaller.com/search/${iso2.toLowerCase()}/${nationalNumber}`
+      ),
+      appUrl: `truecaller://search?number=${waNumber}`,
+      intentUrl: androidIntentUrl(
+        `https://www.truecaller.com/search/${iso2.toLowerCase()}/${nationalNumber}`,
+        "com.truecaller"
       ),
       accent: "from-blue-500 to-cyan-500"
     }

@@ -3,27 +3,39 @@ import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import { PwaRegister } from "@/components/PwaRegister";
 
-const siteTitle = "مركز البحث العام الذكي | أداة بحث عربية آمنة";
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://nitaaq-public-search.vercel.app";
+const siteTitle = "نطاق | الباحث العام";
 const siteDescription =
-  "موقع عربي يساعدك على إنشاء روابط بحث عامة وآمنة عبر Google وYouTube وTikTok وX ومنصات أخرى بدون تخزين بياناتك.";
+  "منصة بحث عامة ذكية وآمنة تساعدك على فتح نتائج البحث العامة عبر عدة منصات بطريقة احترافية ومنظمة.";
+const socialImage = "/brand/social-preview.png";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://public-search-center.vercel.app"),
+  metadataBase: new URL(siteUrl),
   title: {
     default: siteTitle,
-    template: "%s | مركز البحث العام الذكي"
+    template: `%s | ${siteTitle}`
   },
   description: siteDescription,
-  applicationName: "Public Search Center",
+  applicationName: siteTitle,
   manifest: "/manifest.json",
+  alternates: {
+    canonical: "/"
+  },
   icons: {
     icon: [
-      { url: "/favicon.ico" },
-      { url: "/icon-192.svg", type: "image/svg+xml", sizes: "192x192" }
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/brand/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/brand/icon-512.png", type: "image/png", sizes: "512x512" }
     ],
-    apple: [{ url: "/icon-192.svg", type: "image/svg+xml" }]
+    apple: [
+      { url: "/brand/apple-touch-icon.png", type: "image/png", sizes: "180x180" }
+    ],
+    shortcut: [{ url: "/favicon.ico" }]
   },
   keywords: [
+    "نطاق",
+    "الباحث العام",
     "بحث عام",
     "أداة بحث عربية",
     "روابط بحث آمنة",
@@ -31,9 +43,9 @@ export const metadata: Metadata = {
     "بحث منصات اجتماعية",
     "خصوصية"
   ],
-  authors: [{ name: "Public Search Center" }],
-  creator: "Public Search Center",
-  publisher: "Public Search Center",
+  authors: [{ name: "نطاق" }],
+  creator: "نطاق",
+  publisher: "نطاق",
   robots: {
     index: true,
     follow: true,
@@ -48,16 +60,16 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "ar_SA",
-    url: "https://public-search-center.vercel.app",
-    siteName: "Public Search Center",
+    url: siteUrl,
+    siteName: siteTitle,
     title: siteTitle,
     description: siteDescription,
     images: [
       {
-        url: "/og.svg",
+        url: socialImage,
         width: 1200,
         height: 630,
-        alt: "مركز البحث العام الذكي"
+        alt: "نطاق | الباحث العام"
       }
     ]
   },
@@ -65,11 +77,11 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: siteTitle,
     description: siteDescription,
-    images: ["/og.svg"]
+    images: [socialImage]
   },
   appleWebApp: {
     capable: true,
-    title: "مركز البحث العام",
+    title: siteTitle,
     statusBarStyle: "black-translucent"
   },
   formatDetection: {
@@ -99,6 +111,7 @@ export default function RootLayout({
       <body>
         {children}
         <PwaRegister />
+        {/* Vercel Analytics is initialized once in the root layout so page views are tracked globally after deployment on Vercel. */}
         <Analytics />
       </body>
     </html>
