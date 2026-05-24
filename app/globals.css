@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-arabic: "Segoe UI", "Noto Sans Arabic", "Tajawal", sans-serif;
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(15, 143, 114, 0.18), transparent 30rem),
+    radial-gradient(circle at 92% 6%, rgba(139, 94, 52, 0.14), transparent 24rem),
+    linear-gradient(135deg, #fbfaf7 0%, #f5efe5 46%, #edf7f3 100%);
+  color: #111827;
+  font-family: var(--font-arabic);
+}
+
+.dark body {
+  background:
+    radial-gradient(circle at 8% 8%, rgba(34, 197, 160, 0.20), transparent 32rem),
+    radial-gradient(circle at 86% 10%, rgba(197, 143, 72, 0.16), transparent 26rem),
+    linear-gradient(135deg, #050914 0%, #08111f 52%, #0d1f22 100%);
+  color: #f9fafb;
+}
+
+::selection {
+  background: rgba(15, 143, 114, 0.22);
+  color: #064e3b;
+}
+
+.dark ::selection {
+  background: rgba(45, 212, 191, 0.28);
+  color: #f8fafc;
+}
+
+.glass-panel {
+  border: 1px solid rgba(255, 255, 255, 0.54);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 24px 90px rgba(17, 24, 39, 0.10);
+  backdrop-filter: blur(22px);
+}
+
+.dark .glass-panel {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(8, 17, 31, 0.72);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.32);
+}
+
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  box-shadow: 0 0 0 4px rgba(15, 143, 114, 0.22);
+}
+
+.dark .focus-ring:focus-visible {
+  box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.24);
+}

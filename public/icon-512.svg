@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="مركز البحث العام">
+  <defs>
+    <linearGradient id="bg" x1="70" y1="48" x2="450" y2="472" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f8f72"/>
+      <stop offset=".55" stop-color="#08111f"/>
+      <stop offset="1" stop-color="#8b5e34"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="235" cy="220" r="112" fill="none" stroke="#ffffff" stroke-opacity=".92" stroke-width="34"/>
+  <path d="m320 305 76 76" stroke="#f7c873" stroke-width="42" stroke-linecap="round"/>
+  <path d="M137 147c49-48 144-62 215 12" stroke="#2dd4bf" stroke-width="18" stroke-linecap="round"/>
+</svg>
