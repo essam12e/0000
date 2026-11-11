@@ -36,6 +36,8 @@ data class PlaylistItem(
     val title: String,
     val thumbnail: String?,
     val durationSec: Long?,
+    /** رابط العنصر نفسه (لتحليل عيّنة من القائمة وتقدير الحجم). */
+    val url: String? = null,
 )
 
 /** ملف مباشر (صورة/فيديو/صوت/أي ملف) يُحمَّل بدون yt-dlp. */

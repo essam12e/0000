@@ -152,6 +152,7 @@ object YtDlp {
                     title = e.str("title") ?: "عنصر ${i + 1}",
                     thumbnail = e.thumb(),
                     durationSec = e.num("duration")?.toLong(),
+                    url = (e.str("url") ?: e.str("webpage_url"))?.takeIf { it.startsWith("http") },
                 )
             }
             val maxSide = entries.flatMap { e -> (e["formats"] as? JsonArray).orEmpty() }
@@ -344,7 +345,7 @@ object YtDlp {
         f.str("resolution") == "audio only" || (f.num("abr") ?: 0.0) > 0
 
     /** قوائم التشغيل والمنشورات المتعددة: جودات عامة لأن صيغ كل عنصر تُعرف وقت التحميل. */
-    private fun presetOptions(maxSide: Int?): List<QualityOption> {
+    internal fun presetOptions(maxSide: Int?): List<QualityOption> {
         val best = QualityOption("p-best", "الأعلى المتاح", null, "MP4", null, true, "bv*+ba/b", 100000)
         val presets = listOf(2160, 1440, 1080, 720, 480, 360).filter { maxSide == null || it <= maxSide * 1.07 }
             .map { h ->

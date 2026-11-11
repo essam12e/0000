@@ -109,6 +109,7 @@ import com.downloader.app.data.PlaylistItem
 import com.downloader.app.data.QualityOption
 import com.downloader.app.data.SubtitleTrack
 import com.downloader.app.data.hint
+import com.downloader.app.engine.SizeEstimate
 import com.downloader.app.data.message
 import com.downloader.app.ui.components.Badge
 import com.downloader.app.ui.components.BrandMark
@@ -217,19 +218,46 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                         }
                         if (ui.audioMode || info.videoOptions.isEmpty()) {
                             item("audio") {
-                                Stagger(0, "audio") { AudioCard(ui.audioFormat, info.audioSizeBytes.takeIf { !info.isPlaylist }) }
+                                val plSeconds = if (info.isPlaylist) SizeEstimate.selectedSeconds(info.items, ui.selectedItems) else null
+                                val audioSize = if (info.isPlaylist) plSeconds?.let { (it * (ui.plRates[SizeEstimate.AUDIO_KEY] ?: SizeEstimate.typicalAudioRate)).toLong() }
+                                else info.audioSizeBytes
+                                Stagger(0, "audio") { AudioCard(ui.audioFormat, audioSize) }
                             }
                         } else {
                             item("q-label") {
-                                SectionLabel("الجودة", trailing = Fmt.options(info.videoOptions.size))
+                                SectionLabel(
+                                    "الجودة",
+                                    trailing = if (!info.isPlaylist) Fmt.options(info.videoOptions.size)
+                                    else if (ui.plSampling) "جاري تدقيق الحجم…" else "الحجم لـ ${ui.selectedItems.size} فيديو",
+                                )
                                 Spacer(Modifier.height(10.dp))
                             }
                             itemsIndexed(info.videoOptions, key = { _, it -> it.id }) { i, option ->
                                 Stagger(i, option.id) {
-                                    QualityRow(option, selected = option.id == ui.selectedOptionId, top = i == 0) { vm.selectOption(option.id) }
+                                    if (info.isPlaylist) {
+                                        // القوائم: الحجم الإجمالي للفيديوهات المحددة بهذه الجودة.
+                                        val seconds = SizeEstimate.selectedSeconds(info.items, ui.selectedItems)
+                                        val sampled = ui.plRates[option.id]
+                                        val total = seconds?.let { (it * (sampled ?: SizeEstimate.typicalRate(option.shortSide))).toLong() }
+                                        QualityRow(
+                                            option.copy(sizeBytes = total, sizeApprox = true), selected = option.id == ui.selectedOptionId, top = i == 0,
+                                            note = if (sampled != null) "تقريبي" else "تقديري",
+                                        ) { vm.selectOption(option.id) }
+                                    } else {
+                                        QualityRow(option, selected = option.id == ui.selectedOptionId, top = i == 0) { vm.selectOption(option.id) }
+                                    }
                                 }
                             }
                         }
+                        }
+                        if (info.isPlaylist && !info.viaGallery) {
+                            item("pl-size-note") {
+                                Text(
+                                    "الحجم الظاهر هو مجموع الفيديوهات المحددة، محسوباً من مدتها ومن عيّنة من القائمة نفسها؛ قد يختلف الفعلي قليلاً.",
+                                    style = MaterialTheme.typography.bodySmall, color = AppTheme.extra.dim,
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -255,7 +283,16 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                     val caption = when {
                         info.isDirect -> listOfNotNull("ملف مباشر", info.directFiles.first().sizeBytes?.let { Fmt.bytes(it) }).joinToString("  ·  ") { Fmt.iso(it) }
                         info.viaGallery -> if (info.items.size > 1) "${ui.selectedItems.size} من ${info.items.size}  ·  الجودة الأصلية" else "الجودة الأصلية"
-                        info.isPlaylist -> "${ui.selectedItems.size} من ${info.items.size}  ·  " + (if (audio) "صوت ${ui.audioFormat.uppercase()}" else option?.label.orEmpty())
+                        info.isPlaylist -> {
+                            val seconds = SizeEstimate.selectedSeconds(info.items, ui.selectedItems)
+                            val rate = if (audio) ui.plRates[SizeEstimate.AUDIO_KEY] ?: SizeEstimate.typicalAudioRate
+                            else option?.let { ui.plRates[it.id] ?: SizeEstimate.typicalRate(it.shortSide) }
+                            listOfNotNull(
+                                "${ui.selectedItems.size} من ${info.items.size}",
+                                if (audio) "صوت ${ui.audioFormat.uppercase()}" else option?.label,
+                                if (seconds != null && rate != null && ui.selectedItems.isNotEmpty()) Fmt.bytes((seconds * rate).toLong()) + " تقريباً" else null,
+                            ).joinToString("  ·  ") { Fmt.iso(it) }
+                        }
                         else -> {
                             val trimmed = ui.trimStart != null && ui.trimEnd != null && (info.durationSec ?: 0) > 0
                             val fraction = if (trimmed) (ui.trimEnd!! - ui.trimStart!!).toDouble() / info.durationSec!! else 1.0
@@ -573,7 +610,7 @@ private fun Stagger(index: Int, key: Any, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun QualityRow(option: QualityOption, selected: Boolean, top: Boolean, onClick: () -> Unit) {
+private fun QualityRow(option: QualityOption, selected: Boolean, top: Boolean, note: String = "تقريبي", onClick: () -> Unit) {
     val extra = AppTheme.extra
     val border by animateColorAsState(if (selected) extra.gold else MaterialTheme.colorScheme.outlineVariant, label = "qb")
     val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow, label = "qbg")
@@ -608,7 +645,7 @@ private fun QualityRow(option: QualityOption, selected: Boolean, top: Boolean, o
                 color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (option.sizeBytes != null && option.sizeApprox) {
-                Text("تقريبي", style = MaterialTheme.typography.labelSmall, color = extra.dim)
+                Text(note, style = MaterialTheme.typography.labelSmall, color = extra.dim)
             }
         }
     }

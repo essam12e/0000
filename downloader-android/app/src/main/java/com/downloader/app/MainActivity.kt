@@ -43,6 +43,23 @@ class MainActivity : ComponentActivity() {
                 homeVm.onShared(intent.getStringExtra(Intent.EXTRA_TEXT))
             }
             intent?.getBooleanExtra(EXTRA_OPEN_LIBRARY, false) == true -> tab.value = Tab.LIBRARY
+            // اختبار فقط (نسخة المحاكي): قائمة تجريبية من 4 فيديوهات لاختبار تقدير الحجم.
+            BuildConfig.EMULATOR_TEST && intent?.action == "com.downloader.app.TEST_PLAYLIST" -> {
+                val base = "http://10.0.2.2:8000/multi/"
+                val items = listOf(
+                    com.downloader.app.data.PlaylistItem(1, "الدرس الأول", null, 600, base + "master.m3u8"),
+                    com.downloader.app.data.PlaylistItem(2, "الدرس الثاني", null, 300, null),
+                    com.downloader.app.data.PlaylistItem(3, "الدرس الثالث", null, 900, base + "master2.m3u8"),
+                    com.downloader.app.data.PlaylistItem(4, "الدرس الرابع", null, null, null),
+                )
+                tab.value = Tab.HOME
+                homeVm.debugShowPlaylist(
+                    com.downloader.app.data.MediaInfo(
+                        sourceUrl = base + "playlist", title = "قائمة تجريبية", uploader = "اختبار", thumbnail = null, durationSec = null,
+                        platform = "Youtube", videoOptions = com.downloader.app.engine.YtDlp.presetOptions(null), isPlaylist = true, items = items,
+                    )
+                )
+            }
             // اختبار فقط (نسخة المحاكي): تشغيل محرك الترجمة مباشرة وكتابة النتيجة في السجل.
             BuildConfig.EMULATOR_TEST && intent?.action == "com.downloader.app.TEST_TRANSLATE" -> Thread {
                 val out = com.downloader.app.engine.Translator.translate("en-orig", "ar", listOf("Hello, how are you today?", "This video is about cooking.")) {

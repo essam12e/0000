@@ -21,6 +21,7 @@ import com.downloader.app.engine.Direct
 import com.downloader.app.engine.GalleryDl
 import com.downloader.app.engine.DownloadManager
 import com.downloader.app.engine.Net
+import com.downloader.app.engine.SizeEstimate
 import com.downloader.app.engine.YtDlp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -55,6 +56,9 @@ data class HomeUi(
     val subItems: Set<Int>? = null,
     val trimStart: Long? = null,
     val trimEnd: Long? = null,
+    /** القوائم: معدل الحجم الفعلي (بايت/ثانية) لكل جودة من عيّنة فيديوهات؛ فارغ = تقدير نموذجي. */
+    val plRates: Map<String, Double> = emptyMap(),
+    val plSampling: Boolean = false,
     /** آخر تحميل سابق للمحتوى نفسه إن وُجد. */
     val duplicate: HistoryEntry? = null,
 )
@@ -71,6 +75,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val _events = MutableSharedFlow<HomeEvent>(extraBufferCapacity = 4)
     val events = _events.asSharedFlow()
     private var job: Job? = null
+    private var sampleJob: Job? = null
 
     init {
         viewModelScope.launch { settings.flow.collect { s -> _ui.update { it.copy(audioFormat = s.audioFormat) } } }
@@ -82,6 +87,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clear() {
         job?.cancel()
+        sampleJob?.cancel()
         _ui.update { it.copy(url = "", state = HomeState.Idle, selectedOptionId = null, selectedItems = emptySet()) }
     }
 
@@ -149,6 +155,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         job?.cancel()
+        sampleJob?.cancel()
         _ui.update { it.copy(url = url, state = HomeState.Loading, clipboardUrl = null) }
         job = viewModelScope.launch {
             try {
@@ -177,8 +184,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         audioLang = info.audioTracks.firstOrNull { t -> t.original }?.lang,
                         subtitle = null, subItems = null, trimStart = null, trimEnd = null,
                         duplicate = History.find(info.sourceUrl, info.mediaKey),
+                        plRates = emptyMap(), plSampling = false,
                     )
                 }
+                if (info.isPlaylist && !info.viaGallery) samplePlaylist(info)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AppError) {
@@ -187,6 +196,49 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 if (isActive) _ui.update { it.copy(state = HomeState.Failed(ErrorType.GENERIC, e.message)) }
             }
         }
+    }
+
+    /**
+     * يحلّل عيّنة (حتى 3 فيديوهات) من القائمة في الخلفية ليصير تقدير الحجم مبنياً على معدلها الفعلي.
+     * فشل العيّنة لا يؤثر على شيء: يبقى التقدير النموذجي.
+     */
+    private fun samplePlaylist(info: MediaInfo) {
+        val picks = SizeEstimate.pickSamples(info.items, info.items.map { it.index }.toSet())
+        if (picks.isEmpty()) return
+        sampleJob?.cancel()
+        _ui.update { it.copy(plSampling = true) }
+        sampleJob = viewModelScope.launch {
+            val samples = ArrayList<MediaInfo>()
+            for (item in picks) {
+                val sample = try {
+                    YtDlp.analyze(getApplication(), item.url!!)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    null
+                }
+                if (sample != null && !sample.isPlaylist) {
+                    samples += sample
+                    val rates = SizeEstimate.ratesFrom(samples, info.videoOptions)
+                    // لا نطبّق النتيجة إن غيّر المستخدم الرابط في الأثناء.
+                    _ui.update { if ((it.state as? HomeState.Ready)?.info === info) it.copy(plRates = rates) else it }
+                }
+            }
+            _ui.update { if ((it.state as? HomeState.Ready)?.info === info) it.copy(plSampling = false) else it }
+        }
+    }
+
+    /** اختبار فقط (نسخة المحاكي): يعرض قائمة جاهزة لاختبار تقدير الحجم بدون مصدر قوائم حقيقي. */
+    fun debugShowPlaylist(info: MediaInfo) {
+        if (!com.downloader.app.BuildConfig.EMULATOR_TEST) return
+        _ui.update {
+            it.copy(
+                url = info.sourceUrl, state = HomeState.Ready(info), audioMode = false,
+                selectedOptionId = info.videoOptions.first().id, selectedItems = info.items.map { i -> i.index }.toSet(),
+                plRates = emptyMap(), plSampling = false, duplicate = null,
+            )
+        }
+        samplePlaylist(info)
     }
 
     /** الأعلى افتراضياً؛ أو أقرب جودة لا تتجاوز المفضّلة في الإعدادات. */
@@ -249,7 +301,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val items = if (info.isPlaylist) ui.selectedItems.sorted().takeIf { it.isNotEmpty() } ?: return else null
             val single = !info.isPlaylist
             val trim = if (single && ui.trimStart != null && ui.trimEnd != null) ui.trimStart to ui.trimEnd else null
-            val fullSize = if (audio) info.audioSizeBytes else option?.sizeBytes
+            val fullSize = if (info.isPlaylist) {
+                // القوائم: الحجم التقديري للعناصر المحددة.
+                val seconds = SizeEstimate.selectedSeconds(info.items, ui.selectedItems)
+                val rate = if (audio) ui.plRates[SizeEstimate.AUDIO_KEY] ?: SizeEstimate.typicalAudioRate
+                else option?.let { ui.plRates[it.id] ?: SizeEstimate.typicalRate(it.shortSide) }
+                if (seconds != null && rate != null) (seconds * rate).toLong() else null
+            } else if (audio) info.audioSizeBytes else option?.sizeBytes
             val fraction = if (trim != null && (info.durationSec ?: 0) > 0) (trim.second - trim.first).toDouble() / info.durationSec!! else 1.0
             label = listOfNotNull(
                 if (audio) "صوت ${ui.audioFormat.uppercase()}" else option!!.label,
