@@ -268,7 +268,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     subLang = sub?.lang,
                     subAuto = sub?.auto == true,
                     subEmbed = ui.subEmbed,
-                    subUrl = sub?.url.takeIf { single },
+                    subSrc = sub?.src.takeIf { single },
+                    subLocal = sub?.local == true && single,
                     trimStart = trim?.first, trimEnd = trim?.second,
                 )
             if (items != null && sub != null && ui.subItems != null) {

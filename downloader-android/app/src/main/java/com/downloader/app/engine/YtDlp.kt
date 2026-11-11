@@ -294,40 +294,30 @@ object YtDlp {
         val autoObj = o["automatic_captions"] as? JsonObject
         val manual = manualObj?.keys.orEmpty().filter { it != "live_chat" && it != "comments" }
         val common = listOf("ar", "en", "fr", "es", "de", "tr", "ur", "fa", "id", "hi", "ru", "it", "pt", "ja", "ko", "zh-Hans")
+        // التفريغ الآلي بلغة الفيديو الأصلية (مثل en-orig): مصدر الترجمات الآلية المترجمة منه.
+        val origAuto = autoObj?.keys.orEmpty().firstOrNull { it.endsWith("-orig") }
         val auto = autoObj?.keys.orEmpty().filter { it !in manual }.mapNotNull { k ->
             // «ar-en» = عربية مترجمة من الترجمة اليدوية الإنجليزية؛ نعرض هذا النوع للعربية والإنجليزية فقط.
             val src = manual.firstOrNull { m -> k.endsWith("-$m") && k.length > m.length + 1 }
             when {
-                src != null -> k.removeSuffix("-$src").takeIf { it == "ar" || it == "en" }?.let { SubtitleTrack(k, true, from = src) }
-                k.endsWith("-orig") || k in common -> SubtitleTrack(k, true)
+                src != null -> k.removeSuffix("-$src").takeIf { it == "ar" || it == "en" }?.let { SubtitleTrack(k, true, from = src, src = src) }
+                k.endsWith("-orig") -> SubtitleTrack(k, true)
+                k in common -> SubtitleTrack(k, true, src = origAuto?.takeIf { it.removeSuffix("-orig") != k })
                 else -> null
             }
         }
         val listed = manual.map { SubtitleTrack(it, false) } + auto
 
-        // مسار احتياطي ليوتيوب: إن لم تُدرج أي ترجمة عربية، نطلبها من يوتيوب مباشرة بإضافة tlang=ar
-        // إلى رابط أي ترجمة متاحة (يدوية أولاً لأنها أدق، ثم التفريغ الآلي الأصلي).
-        fun directVtt(obj: JsonObject?, key: String): String? = (obj?.get(key) as? JsonArray)?.mapNotNull { it as? JsonObject }
-            ?.firstOrNull { it.str("ext") == "vtt" && it.str("protocol")?.startsWith("m3u8") != true }?.str("url")
-        val isYoutube = o.str("extractor_key") == "Youtube"
-        val fallback = if (listed.none { it.lang == "ar" || it.lang.startsWith("ar-") } && (isYoutube || BuildConfig.SUB_TEST_URL.isNotEmpty())) {
-            val manualSrc = manual.firstOrNull { directVtt(manualObj, it) != null }
-            val autoSrc = autoObj?.keys.orEmpty().firstOrNull { it.endsWith("-orig") && directVtt(autoObj, it) != null }
-            val base = manualSrc?.let { directVtt(manualObj, it) } ?: autoSrc?.let { directVtt(autoObj, it) }
-            when {
-                BuildConfig.SUB_TEST_URL.isNotEmpty() && !isYoutube -> SubtitleTrack("ar", true, from = "en", url = BuildConfig.SUB_TEST_URL)
-                base != null -> SubtitleTrack(
-                    "ar", true, from = manualSrc ?: autoSrc?.removeSuffix("-orig"),
-                    url = base.replace(Regex("[&?]tlang=[^&]*"), "") + "&tlang=ar",
-                )
-                else -> null
-            }
+        // إن لم تعرض المنصة العربية إطلاقاً لكن توجد ترجمة بلغة أخرى: نعرض «العربية» وتُترجم على الجهاز.
+        val fallback = if (listed.none { it.lang == "ar" || it.lang.startsWith("ar-") }) {
+            val source = manual.firstOrNull { it.startsWith("en") } ?: manual.firstOrNull() ?: origAuto
+            source?.let { SubtitleTrack("ar", true, from = it, src = it, local = true) }
         } else null
 
         fun rank(t: SubtitleTrack): Int {
             val arabic = t.lang == "ar" || t.lang.startsWith("ar-")
             val english = t.lang == "en" || t.lang.startsWith("en-")
-            val quality = if (!t.auto) 0 else if (t.from != null && t.from in manual) 1 else 2
+            val quality = if (!t.auto) 0 else if (t.from != null && t.from in manual) 1 else if (t.local) 3 else 2
             return (if (arabic) 0 else if (english) 10 else 20) + quality
         }
         val subs = (listed + listOfNotNull(fallback)).sortedWith(compareBy<SubtitleTrack>({ rank(it) }, { it.lang }))
@@ -406,25 +396,20 @@ object YtDlp {
                 addOption("--convert-thumbnails", "jpg")
             } else {
                 addOption("-f", (spec.formatSelector ?: "bv*+ba/b").replace("{A}", langFilter))
-                // الترجمة: مدمجة داخل الفيديو (مسار قابل للإظهار/الإخفاء) أو ملف SRT مستقل.
-                // (إذا وُجد subUrl يجلب التطبيق الترجمة بنفسه بعد التحميل — انظر Subtitles.kt.)
-                spec.subLang?.takeIf { spec.subUrl == null }?.let { lang ->
-                    if (playlist != null) {
-                        // قائمة: لا نعرف ترجمات كل فيديو مسبقاً → اليدوية إن وُجدت وإلا الآلية/المترجمة.
-                        addOption("--sub-langs", "$lang,$lang-.*")
-                        addOption("--write-subs")
-                        addOption("--write-auto-subs")
-                        if (spec.subEmbed) addOption("--embed-subs") else addOption("--convert-subs", "srt")
+                // الترجمة: ننزّل الملفات فقط (SRT)، والتطبيق يختار/يترجم/يدمج بعد التحميل (Subtitles.kt).
+                // --ignore-errors: يوتيوب يرفض كثيراً الترجمات المترجمة آلياً (HTTP 429)، ولا يجوز أن يُفشل ذلك الفيديو.
+                spec.subLang?.let { lang ->
+                    val wanted = if (playlist != null) {
+                        // قائمة: لا نعرف ترجمات كل فيديو مسبقاً → المطلوبة بكل صيغها + الأصلية كمصدر للترجمة على الجهاز.
+                        listOf(lang, "$lang-.*", "en", ".*-orig")
                     } else {
-                        addOption("--sub-langs", lang)
-                        if (spec.subEmbed) {
-                            addOption("--embed-subs")
-                            if (spec.subAuto) addOption("--write-auto-subs")
-                        } else {
-                            addOption(if (spec.subAuto) "--write-auto-subs" else "--write-subs")
-                            addOption("--convert-subs", "srt")
-                        }
+                        listOfNotNull(lang.takeIf { !spec.subLocal }, spec.subSrc)
                     }
+                    addOption("--sub-langs", wanted.distinct().joinToString(","))
+                    addOption("--write-subs")
+                    addOption("--write-auto-subs")
+                    addOption("--convert-subs", "srt")
+                    if (playlist == null) addOption("--ignore-errors")
                 }
                 // قيد الضلع الأقصر لجودات القوائم (يعمل للأفقي والعمودي)، مع تفضيل H.264/AAC للتوافق.
                 val cap = Regex("""^(\d{3,4})p""").find(spec.qualityLabel)?.groupValues?.get(1)
@@ -456,7 +441,6 @@ object YtDlp {
                         else if (phase >= 2) "تحميل الصوت" else "تحميل الفيديو"
                     }
                     line.startsWith("[Merger]") -> stage = "دمج الفيديو والصوت"
-                    line.startsWith("[EmbedSubtitle]") -> stage = "دمج الترجمة"
                     line.startsWith("[SubtitlesConvertor]") -> stage = "تحويل الترجمة"
                     trimmed && line.startsWith("[download]") && stage == "جاري التحضير" -> stage = "تحميل المقطع المحدد"
                     line.startsWith("[ExtractAudio]") -> stage = "تحويل الصوت"
@@ -482,7 +466,10 @@ object YtDlp {
             throw c
         } catch (t: Throwable) {
             // مع --ignore-errors قد تفشل عناصر وتنجح أخرى؛ القرار النهائي للمستدعي حسب الملفات الناتجة.
-            if (playlist == null || outputFiles(dir).isEmpty()) throw classify(context, t.message)
+            // وكذلك عند طلب ترجمة: رفض ملف الترجمة يُسجَّل خطأً لكن الفيديو نفسه اكتمل.
+            val mediaDone = outputFiles(dir).any { it.extension.lowercase() !in Subtitles.SUB_EXTS }
+            val tolerated = (playlist != null || spec.subLang != null) && mediaDone
+            if (!tolerated) throw classify(context, t.message)
         } finally {
             cookies?.delete()
         }

@@ -25,8 +25,10 @@ data class SubtitleTrack(
     val auto: Boolean,
     /** لغة المصدر إذا كانت الترجمة مترجمة آلياً من ترجمة أخرى (مثل ar مترجمة من en). */
     val from: String? = null,
-    /** رابط مباشر يجلبه التطبيق بنفسه عندما لا يُدرج yt-dlp هذه الترجمة (المسار الاحتياطي). */
-    val url: String? = null,
+    /** رمز الترجمة الأصلية التي تُنزَّل معها لتُترجم على الجهاز إذا رفضت المنصة الترجمة الآلية. */
+    val src: String? = null,
+    /** true = المنصة لا تعرض هذه اللغة أصلاً؛ تُترجم على الجهاز مباشرة من [src]. */
+    val local: Boolean = false,
 )
 
 data class PlaylistItem(
@@ -90,8 +92,10 @@ data class DownloadSpec(
     val subEmbed: Boolean = true,
     val trimStart: Long? = null,
     val trimEnd: Long? = null,
-    /** إن وُجد: يجلب التطبيق الترجمة من هذا الرابط ويحوّلها/يدمجها بنفسه بعد التحميل. */
-    val subUrl: String? = null,
+    /** رمز الترجمة الأصلية المرافقة (مصدر الترجمة على الجهاز). */
+    val subSrc: String? = null,
+    /** لا تُطلب [subLang] من المنصة؛ تُترجم على الجهاز من [subSrc]. */
+    val subLocal: Boolean = false,
 )
 
 @Serializable

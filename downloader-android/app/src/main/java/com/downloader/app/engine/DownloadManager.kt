@@ -188,16 +188,10 @@ object DownloadManager {
                 } else if (spec.mode == DownloadMode.GALLERY) {
                     GalleryDl.download(app, id, spec, dir, onProgress)
                 } else {
-                    val written = YtDlp.download(app, id, spec, dir, onProgress)
-                    if (spec.subLang != null) {
-                        val ok = if (spec.subUrl != null) {
-                            onProgress(YtDlp.Progress(0.99f, null, null, "جلب الترجمة"))
-                            Subtitles.fetchAndApply(app, spec.subUrl, spec.subLang, spec.subEmbed, dir)
-                        } else written > 0
-                        if (!ok) _notices.tryEmit("اكتمل التحميل، لكن المنصة لم تُتح الترجمة المطلوبة")
-                        else if (spec.playlistItems != null && written < spec.playlistItems.size) {
-                            _notices.tryEmit("الترجمة توفرت لـ $written من ${spec.playlistItems.size} فيديوهات")
-                        }
+                    YtDlp.download(app, id, spec, dir, onProgress)
+                    if (spec.subLang != null && spec.mode == DownloadMode.VIDEO) {
+                        val r = Subtitles.finalize(app, spec, dir) { stage -> onProgress(YtDlp.Progress(0.99f, null, null, stage)) }
+                        r.notice()?.let { _notices.tryEmit(it) }
                     }
                 }
                 val files = YtDlp.outputFiles(dir).filter { f ->
@@ -205,7 +199,7 @@ object DownloadManager {
                     val ext = f.extension.lowercase()
                     val leftoverCover = spec.mode == DownloadMode.AUDIO && Mime.kindOf(Mime.ofExtension(ext)) == MediaKind.IMAGE
                     // ترجمة طُلب دمجها داخل الفيديو: ملفها المؤقت ليس ملفاً للمستخدم.
-                    val leftoverSub = spec.subLang != null && spec.subEmbed && ext in setOf("vtt", "srt", "ass", "srv3", "ttml", "json3")
+                    val leftoverSub = spec.subLang != null && spec.subEmbed && ext in Subtitles.SUB_EXTS
                     !leftoverCover && !leftoverSub
                 }
                 if (files.isEmpty()) throw AppError(ErrorType.GENERIC, "لم ينتج عن التحميل أي ملف")

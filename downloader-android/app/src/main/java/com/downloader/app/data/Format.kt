@@ -65,9 +65,11 @@ object Fmt {
 
     /** اسم اللغة بالعربية من رمزها (ar → العربية، en-US → الإنجليزية (الولايات المتحدة)). */
     fun language(code: String): String {
-        val clean = code.removeSuffix("-orig")
+        // رموز يوتيوب قد تحمل لواحق ليست جزءاً من اللغة (en-orig، en-eEY6OEpapPo): نُبقي اللغة والمنطقة/الخط فقط.
+        val parts = code.removeSuffix("-orig").split('-')
+        val clean = if (parts.size > 1 && parts[1].length in 2..4 && parts[1].all { it.isLetter() }) parts[0] + "-" + parts[1] else parts[0]
         val name = runCatching { Locale.forLanguageTag(clean).getDisplayName(Locale("ar")) }.getOrNull()
-        return if (name.isNullOrBlank() || name.equals(clean, true)) code else name
+        return if (name.isNullOrBlank() || name.equals(clean, true)) clean else name
     }
 
     fun percent(p: Float): String = String.format(Locale.US, "%d%%", (p * 100).toInt().coerceIn(0, 100))

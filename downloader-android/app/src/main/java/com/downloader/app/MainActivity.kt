@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
             }
             intent?.getBooleanExtra(EXTRA_OPEN_LIBRARY, false) == true -> tab.value = Tab.LIBRARY
             // اختبار فقط (نسخة المحاكي): صورة النظام بلا منتقي مجلدات، فنستقبل مجلداً مُنح إذنه عبر adb.
-            BuildConfig.SUB_TEST_URL.isNotEmpty() && intent?.action == "com.downloader.app.TEST_SET_TREE" ->
+            BuildConfig.EMULATOR_TEST && intent?.action == "com.downloader.app.TEST_SET_TREE" ->
                 intent.data?.let { uri ->
                     androidx.lifecycle.ViewModelProvider(this)[com.downloader.app.ui.settings.SettingsViewModel::class.java].setSaveFolder(uri)
                 }

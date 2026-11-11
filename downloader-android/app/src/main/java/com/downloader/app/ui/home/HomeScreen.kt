@@ -789,7 +789,8 @@ private fun OptionsCard(info: MediaInfo, ui: HomeUi, vm: HomeViewModel) {
                     }
                 }
                 Text(
-                    if (embed) "تُضاف كمسار داخل الملف يمكن إظهاره أو إخفاؤه من المشغّل." else "يُحفظ ملف الترجمة بجانب الفيديو باسمه نفسه.",
+                    (if (embed) "تُضاف كمسار داخل الملف يمكن إظهاره أو إخفاؤه من المشغّل." else "يُحفظ ملف الترجمة بجانب الفيديو باسمه نفسه.") +
+                        " إذا رفضت المنصة الترجمة الآلية تُترجم على جهازك (يُنزَّل نموذج اللغة مرة واحدة، نحو 30 م.ب).",
                     style = MaterialTheme.typography.bodySmall, color = AppTheme.extra.dim, modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
                 )
                 ChoiceRow("بدون ترجمة", null, ui.subtitle == null) { vm.setSubtitle(null, embed); if (!playlist) dialog = null }
@@ -924,6 +925,7 @@ private fun subName(t: SubtitleTrack): String =
 /** مصدر الترجمة — يحدد دقتها: صاحب المحتوى ← مترجمة من ترجمة يدوية ← مترجمة من التفريغ الآلي. */
 private fun subBadge(t: SubtitleTrack): String = when {
     !t.auto -> "من صاحب الفيديو"
+    t.local -> "تُترجم على الجهاز من ${Fmt.language(t.from ?: "")}"
     t.from != null -> "مترجمة من ${Fmt.language(t.from)}"
     t.lang.endsWith("-orig") -> "تفريغ آلي"
     else -> "ترجمة آلية"

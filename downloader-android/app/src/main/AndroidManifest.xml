@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- أقل قدر من الصلاحيات: إنترنت + إشعارات + خدمة Foreground -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -46,6 +47,14 @@
             android:name=".service.DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!--
+            بلا تتبّع: مكتبة الترجمة (ML Kit) تسجّل إحصاءات استخدام عبر Google DataTransport.
+            حذف هذه الخدمة يلغي تسجيل «وجهة الإرسال» فتُهمَل الإحصاءات على الجهاز ولا يُرسل شيء.
+        -->
+        <service
+            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+            tools:node="remove" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

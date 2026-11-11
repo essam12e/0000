@@ -24,12 +24,12 @@ android {
         applicationId = "com.downloader.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
         // مهلة تحليل الرابط: 4 دقائق؛ أطول في نسخة المحاكي البرمجي لأنه أبطأ بعشرات المرات.
         buildConfigField("long", "ANALYZE_TIMEOUT_MS", if (emulatorAbi) "1800000L" else "240000L")
-        // لاختبار مسار الترجمة الاحتياطي على المحاكي فقط (فارغ في النسخة النهائية).
-        buildConfigField("String", "SUB_TEST_URL", if (emulatorAbi) "\"http://10.0.2.2:8000/multi/s_en.vtt\"" else "\"\"")
+        // أدوات اختبار تُفعَّل في نسخة المحاكي فقط.
+        buildConfigField("boolean", "EMULATOR_TEST", emulatorAbi.toString())
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
             if (emulatorAbi) abiFilters += "x86_64"
@@ -94,6 +94,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.datastore:datastore-preferences:1.3.0")
     implementation("androidx.documentfile:documentfile:1.1.0")
+    // ترجمة نصوص على الجهاز (للترجمات التي ترفض المنصة ترجمتها). إرسال الإحصاءات معطَّل في AndroidManifest.
+    implementation("com.google.mlkit:translate:17.0.3")
 
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-ui:1.11.1")
