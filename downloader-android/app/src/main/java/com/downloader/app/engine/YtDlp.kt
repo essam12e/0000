@@ -3,6 +3,8 @@ package com.downloader.app.engine
 import android.content.Context
 import com.downloader.app.auth.CookieJarStore
 import com.downloader.app.data.AppError
+import com.downloader.app.data.AudioTrack
+import com.downloader.app.data.SubtitleTrack
 import com.downloader.app.data.DownloadMode
 import com.downloader.app.data.DownloadSpec
 import com.downloader.app.data.ErrorType
@@ -34,7 +36,7 @@ import java.util.UUID
 object YtDlp {
     private val ready = CompletableDeferred<Unit>()
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-    private const val ANALYZE_TIMEOUT_MS = 240_000L
+    private const val ANALYZE_TIMEOUT_MS = com.downloader.app.BuildConfig.ANALYZE_TIMEOUT_MS
 
     /** يُستدعى مرة واحدة من Application على خيط خلفي (يفكّ Python و FFmpeg أول تشغيل). */
     fun init(context: Context) {
@@ -161,6 +163,7 @@ object YtDlp {
                 videoOptions = presetOptions(maxSide),
                 isPlaylist = true,
                 items = items,
+                mediaKey = root.str("id")?.let { id -> "${root.str("extractor_key") ?: "x"}:$id" },
             )
         }
         return parseSingle(url, root)
@@ -240,10 +243,11 @@ object YtDlp {
                 bestAudioSize != null -> (videoSize.first + bestAudioSize.first) to (videoSize.second || bestAudioSize.second)
                 else -> videoSize.first to true
             }
+            // {A} يُستبدل وقت التحميل بفلتر لغة الصوت المختارة (أو يُحذف).
             val selector = if (combined || bestAudio == null) {
                 "$id/b[height<=$h]/bv*[height<=$h]+ba/b"
             } else {
-                "$id+ba[ext=m4a]/$id+ba/bv*[height<=$h]+ba/b[height<=$h]/b"
+                "$id+ba{A}[ext=m4a]/$id+ba{A}/$id+ba/bv*[height<=$h]+ba/b[height<=$h]/b"
             }
             QualityOption(
                 id = "v$side-$id",
@@ -272,6 +276,23 @@ object YtDlp {
         val audioSize = bestAudioSize?.first
             ?: duration?.let { (it * 128 * 125).toLong() }
 
+        // مسارات الصوت (الدبلجات): تُعرض فقط إذا وُجدت أكثر من لغة.
+        val tracks = audioOnly.mapNotNull { f ->
+            val lang = f.str("language") ?: return@mapNotNull null
+            val original = f.str("format_note")?.contains("original", true) == true || (f.num("language_preference") ?: 0.0) >= 10
+            lang to original
+        }.groupBy({ it.first }, { it.second }).map { (lang, flags) -> AudioTrack(lang, flags.any { it }) }
+            .sortedWith(compareBy<AudioTrack>({ !it.original }, { !it.lang.startsWith("ar") }, { !it.lang.startsWith("en") }, { it.lang }))
+            .takeIf { it.size > 1 }.orEmpty()
+
+        // الترجمات: اليدوية كلها، والآلية للغات الشائعة فقط (يوتيوب يعرض أكثر من مئة).
+        val manual = (o["subtitles"] as? JsonObject)?.keys.orEmpty().filter { it != "live_chat" && it != "comments" }
+        val common = listOf("ar", "en", "fr", "es", "de", "tr", "ur", "fa", "id", "hi", "ru", "it", "pt", "ja", "ko", "zh-Hans")
+        val autoKeys = (o["automatic_captions"] as? JsonObject)?.keys.orEmpty()
+        val auto = autoKeys.filter { k -> k.endsWith("-orig") || k in common }.filter { it !in manual }
+        val subOrder = compareBy<SubtitleTrack>({ it.auto }, { !it.lang.startsWith("ar") }, { !it.lang.startsWith("en") }, { it.lang })
+        val subs = (manual.map { SubtitleTrack(it, false) } + auto.map { SubtitleTrack(it, true) }).sortedWith(subOrder)
+
         return MediaInfo(
             sourceUrl = url,
             title = o.str("title") ?: o.str("fulltitle") ?: "بدون عنوان",
@@ -282,10 +303,13 @@ object YtDlp {
             videoOptions = options,
             hasAudio = looksAudioOnly || bestAudio != null || formats.any { hasVideo(it) && hasAudio(it) } || formats.isEmpty(),
             audioSizeBytes = audioSize,
+            audioTracks = tracks,
+            subtitles = if (options.isEmpty()) emptyList() else subs,
+            mediaKey = o.str("id")?.let { id -> "${o.str("extractor_key") ?: o.str("extractor") ?: "x"}:$id" },
         )
     }
 
-    private fun f_isAudio(f: JsonObject) = f.str("acodec").let { it != null && it != "none" } ||
+    private fun f_isAudio(f: JsonObject) = f.str("vcodec") == "none" || f.str("acodec").let { it != null && it != "none" } ||
         f.str("resolution") == "audio only" || (f.num("abr") ?: 0.0) > 0
 
     /** قوائم التشغيل والمنشورات المتعددة: جودات عامة لأن صيغ كل عنصر تُعرف وقت التحميل. */
@@ -328,8 +352,9 @@ object YtDlp {
                 addOption("--no-playlist")
                 addOption("-o", "%(title).80B.%(ext)s")
             }
+            val langFilter = spec.audioLang?.let { "[language=$it]" }.orEmpty()
             if (spec.mode == DownloadMode.AUDIO) {
-                addOption("-f", "ba/b")
+                addOption("-f", if (langFilter.isEmpty()) "ba/b" else "ba$langFilter/ba/b")
                 addOption("-x")
                 addOption("--audio-format", spec.audioFormat)
                 addOption("--audio-quality", "0")
@@ -338,13 +363,28 @@ object YtDlp {
                 addOption("--embed-thumbnail")
                 addOption("--convert-thumbnails", "jpg")
             } else {
-                addOption("-f", spec.formatSelector ?: "bv*+ba/b")
+                addOption("-f", (spec.formatSelector ?: "bv*+ba/b").replace("{A}", langFilter))
+                // الترجمة: مدمجة داخل الفيديو (مسار قابل للإظهار/الإخفاء) أو ملف SRT مستقل.
+                spec.subLang?.let { lang ->
+                    addOption("--sub-langs", lang)
+                    if (spec.subEmbed) {
+                        addOption("--embed-subs")
+                        if (spec.subAuto) addOption("--write-auto-subs")
+                    } else {
+                        addOption(if (spec.subAuto) "--write-auto-subs" else "--write-subs")
+                        addOption("--convert-subs", "srt")
+                    }
+                }
                 // قيد الضلع الأقصر لجودات القوائم (يعمل للأفقي والعمودي)، مع تفضيل H.264/AAC للتوافق.
                 val cap = Regex("""^(\d{3,4})p""").find(spec.qualityLabel)?.groupValues?.get(1)
                 if (playlist != null && cap != null) addOption("-S", "res:$cap,vcodec:h264,acodec:m4a")
                 addOption("--merge-output-format", "mp4")
             }
         }
+
+        // قصّ مقطع: تحميل الجزء المطلوب فقط (القصّ عند أقرب إطار مفتاحي — سريع وبلا إعادة ترميز).
+        val trimmed = spec.trimStart != null && spec.trimEnd != null && playlist == null
+        if (trimmed) request.addOption("--download-sections", "*${spec.trimStart}-${spec.trimEnd}")
 
         val total = playlist?.size ?: 1
         var item = 1
@@ -364,11 +404,14 @@ object YtDlp {
                         else if (phase >= 2) "تحميل الصوت" else "تحميل الفيديو"
                     }
                     line.startsWith("[Merger]") -> stage = "دمج الفيديو والصوت"
+                    line.startsWith("[EmbedSubtitle]") -> stage = "دمج الترجمة"
+                    line.startsWith("[SubtitlesConvertor]") -> stage = "تحويل الترجمة"
+                    trimmed && line.startsWith("[download]") && stage == "جاري التحضير" -> stage = "تحميل المقطع المحدد"
                     line.startsWith("[ExtractAudio]") -> stage = "تحويل الصوت"
                     line.startsWith("[EmbedThumbnail]") || line.startsWith("[Metadata]") -> stage = "إضافة الغلاف والبيانات"
                     line.startsWith("[VideoRemuxer]") || line.startsWith("[FixupM") -> stage = "معالجة الملف"
                 }
-                val post = line.startsWith("[Merger]") || line.startsWith("[ExtractAudio]") ||
+                val post = line.startsWith("[Merger]") || line.startsWith("[ExtractAudio]") || line.startsWith("[EmbedSubtitle]") ||
                     line.startsWith("[EmbedThumbnail]") || line.startsWith("[Metadata]") || line.startsWith("[ThumbnailsConvertor]") ||
                     line.startsWith("[VideoRemuxer]") || line.startsWith("[FixupM")
                 val p = (percent / 100f).coerceIn(0f, 1f)
@@ -378,9 +421,10 @@ object YtDlp {
                     phase <= 1 -> p * 0.88f
                     else -> 0.88f + p * 0.10f
                 }
-                val overall = ((item - 1) + within) / total
+                // عند القصّ يتولى FFmpeg التحميل ولا يعطي نسبة مئوية → تقدّم غير محدد.
+                val overall = if (trimmed && !post && percent <= 0f) -1f else ((item - 1) + within) / total
                 val label = if (total > 1) "$stage ($item/$total)" else stage
-                onProgress(Progress(overall.coerceIn(0f, 1f), speedRegex.find(line)?.groupValues?.get(1), eta.takeIf { it > 0 && !post }, label))
+                onProgress(Progress(if (overall < 0) -1f else overall.coerceIn(0f, 1f), speedRegex.find(line)?.groupValues?.get(1), eta.takeIf { it > 0 && !post }, label))
             }
         } catch (c: YoutubeDL.CanceledException) {
             throw c

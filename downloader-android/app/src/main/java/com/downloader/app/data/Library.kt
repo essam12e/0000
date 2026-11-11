@@ -54,5 +54,24 @@ object Library {
         persist()
     }
 
+    /** يغيّر عنوان الملف واسمه على القرص (مع الإبقاء على الامتداد). */
+    fun rename(id: String, newTitle: String): Boolean {
+        val item = get(id) ?: return false
+        val title = newTitle.trim()
+        if (title.isEmpty()) return false
+        val src = File(item.path)
+        val ext = src.extension
+        var dest = File(src.parentFile, safeFileName(title) + if (ext.isNotEmpty()) ".$ext" else "")
+        var i = 2
+        while (dest.exists() && dest != src) {
+            dest = File(src.parentFile, safeFileName(title) + " ($i)" + if (ext.isNotEmpty()) ".$ext" else "")
+            i++
+        }
+        if (dest != src && !src.renameTo(dest)) return false
+        _items.update { list -> list.map { if (it.id == id) it.copy(title = title, path = dest.absolutePath) else it } }
+        persist()
+        return true
+    }
+
     fun get(id: String): LibraryItem? = _items.value.firstOrNull { it.id == id }
 }

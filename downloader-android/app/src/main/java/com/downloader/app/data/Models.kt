@@ -16,6 +16,12 @@ data class QualityOption(
     val shortSide: Int,
 )
 
+/** مسار صوتي بلغة معيّنة (فيديوهات متعددة الدبلجة). */
+data class AudioTrack(val lang: String, val original: Boolean)
+
+/** ترجمة متاحة: يدوية من صاحب المحتوى أو مولّدة آلياً. */
+data class SubtitleTrack(val lang: String, val auto: Boolean)
+
 data class PlaylistItem(
     val index: Int,
     val title: String,
@@ -47,6 +53,10 @@ data class MediaInfo(
     val directFiles: List<DirectFile> = emptyList(),
     /** النتيجة من gallery-dl: العناصر ملفات أصلية (صور/فيديو) بلا خيارات جودة. */
     val viaGallery: Boolean = false,
+    val audioTracks: List<AudioTrack> = emptyList(),
+    val subtitles: List<SubtitleTrack> = emptyList(),
+    /** معرّف ثابت للمحتوى (المنصة + المعرّف) لكشف التكرار مهما اختلف شكل الرابط. */
+    val mediaKey: String? = null,
 ) {
     val isDirect get() = directFiles.isNotEmpty()
 }
@@ -67,6 +77,12 @@ data class DownloadSpec(
     val directName: String? = null,
     val expectedBytes: Long? = null,
     val durationSec: Long? = null,
+    val audioLang: String? = null,
+    val subLang: String? = null,
+    val subAuto: Boolean = false,
+    val subEmbed: Boolean = true,
+    val trimStart: Long? = null,
+    val trimEnd: Long? = null,
 )
 
 @Serializable
@@ -119,3 +135,15 @@ fun ErrorType.hint(): String = when (this) {
     ErrorType.ENGINE -> "أعد فتح التطبيق، وإن استمرت المشكلة امسح الكاش من الإعدادات."
     ErrorType.GENERIC -> "حاول مرة أخرى بعد قليل. إن تكرر الخطأ فحدّث المحرك من الإعدادات."
 }
+
+@Serializable
+data class HistoryEntry(
+    val id: String,
+    val url: String,
+    val key: String? = null,
+    val title: String,
+    val thumbnail: String? = null,
+    val label: String = "",
+    val platform: String? = null,
+    val at: Long = System.currentTimeMillis(),
+)

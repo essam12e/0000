@@ -188,7 +188,11 @@ object DownloadManager {
                 }
                 val files = YtDlp.outputFiles(dir).filter { f ->
                     // في وضع الصوت: صورة غلاف لم تُضمَّن ليست ملفاً للمستخدم.
-                    spec.mode != DownloadMode.AUDIO || Mime.kindOf(Mime.ofExtension(f.extension)) != MediaKind.IMAGE
+                    val ext = f.extension.lowercase()
+                    val leftoverCover = spec.mode == DownloadMode.AUDIO && Mime.kindOf(Mime.ofExtension(ext)) == MediaKind.IMAGE
+                    // ترجمة طُلب دمجها داخل الفيديو: ملفها المؤقت ليس ملفاً للمستخدم.
+                    val leftoverSub = spec.subLang != null && spec.subEmbed && ext in setOf("vtt", "srt", "ass", "srv3", "ttml", "json3")
+                    !leftoverCover && !leftoverSub
                 }
                 if (files.isEmpty()) throw AppError(ErrorType.GENERIC, "لم ينتج عن التحميل أي ملف")
                 Library.add(files.map { f ->

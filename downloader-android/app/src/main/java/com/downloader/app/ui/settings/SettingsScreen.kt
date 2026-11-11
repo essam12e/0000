@@ -113,6 +113,8 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
         Spacer(Modifier.height(22.dp))
         SectionLabel("التخزين")
         Group {
+            SettingRow("مكان الحفظ", "التنزيلات ‹ داونلودر\nفي مجلدات: فيديو، صوتيات، صور، أخرى") {}
+            Divider()
             SettingRow("مسح الكاش", "ملفات مؤقتة وصور مصغّرة: ${Fmt.bytes(cache.coerceAtLeast(1024))}\nلا يمسّ ملفات «تحميلاتي»") {
                 Pill("مسح", onClick = vm::clearCache)
             }

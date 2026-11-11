@@ -9,6 +9,10 @@ import com.downloader.app.data.AppError
 import com.downloader.app.data.DownloadMode
 import com.downloader.app.data.DownloadSpec
 import com.downloader.app.data.ErrorType
+import com.downloader.app.data.Fmt
+import com.downloader.app.data.History
+import com.downloader.app.data.HistoryEntry
+import com.downloader.app.data.SubtitleTrack
 import com.downloader.app.data.MediaInfo
 import com.downloader.app.data.QualityOption
 import com.downloader.app.data.SettingsStore
@@ -44,10 +48,18 @@ data class HomeUi(
     val selectedItems: Set<Int> = emptySet(),
     val audioFormat: String = "mp3",
     val clipboardUrl: String? = null,
+    val audioLang: String? = null,
+    val subtitle: SubtitleTrack? = null,
+    val subEmbed: Boolean = true,
+    val trimStart: Long? = null,
+    val trimEnd: Long? = null,
+    /** آخر تحميل سابق للمحتوى نفسه إن وُجد. */
+    val duplicate: HistoryEntry? = null,
 )
 
 sealed interface HomeEvent {
     data class Enqueued(val count: Int) : HomeEvent
+    data class ConfirmDuplicate(val previous: HistoryEntry) : HomeEvent
 }
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
@@ -160,6 +172,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         state = HomeState.Ready(info), audioMode = wantAudio, selectedOptionId = selected?.id,
                         selectedItems = info.items.map { item -> item.index }.toSet(),
+                        audioLang = info.audioTracks.firstOrNull { t -> t.original }?.lang,
+                        subtitle = null, trimStart = null, trimEnd = null,
+                        duplicate = History.find(info.sourceUrl, info.mediaKey),
                     )
                 }
             } catch (e: CancellationException) {
@@ -190,10 +205,20 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         it.copy(selectedItems = if (it.selectedItems.size == all.size) emptySet() else all)
     }
 
-    fun download() {
+    fun setAudioLang(lang: String?) = _ui.update { it.copy(audioLang = lang) }
+    fun setSubtitle(track: SubtitleTrack?, embed: Boolean) = _ui.update { it.copy(subtitle = track, subEmbed = embed) }
+    fun setTrim(start: Long?, end: Long?) = _ui.update { it.copy(trimStart = start, trimEnd = end) }
+
+    /** [force] = المستخدم أكّد إعادة تحميل محتوى سبق تحميله. */
+    fun download(force: Boolean = false) {
         val ui = _ui.value
         val info = (ui.state as? HomeState.Ready)?.info ?: return
+        if (!force && ui.duplicate != null) {
+            _events.tryEmit(HomeEvent.ConfirmDuplicate(ui.duplicate))
+            return
+        }
         var count = 0
+        var label = "تحميل مباشر"
         if (info.isDirect) {
             info.directFiles.forEach { f ->
                 DownloadManager.enqueue(
@@ -214,23 +239,39 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 )
             )
             count = items.size
+            label = "الجودة الأصلية"
         } else {
             val option = info.videoOptions.firstOrNull { it.id == ui.selectedOptionId } ?: info.videoOptions.firstOrNull()
             val audio = ui.audioMode || option == null
             val items = if (info.isPlaylist) ui.selectedItems.sorted().takeIf { it.isNotEmpty() } ?: return else null
+            val single = !info.isPlaylist
+            val trim = if (single && ui.trimStart != null && ui.trimEnd != null) ui.trimStart to ui.trimEnd else null
+            val fullSize = if (audio) info.audioSizeBytes else option?.sizeBytes
+            val fraction = if (trim != null && (info.durationSec ?: 0) > 0) (trim.second - trim.first).toDouble() / info.durationSec!! else 1.0
+            label = listOfNotNull(
+                if (audio) "صوت ${ui.audioFormat.uppercase()}" else option!!.label,
+                trim?.let { "مقطع ${Fmt.clock(it.first)}–${Fmt.clock(it.second)}" },
+            ).joinToString("  ·  ") { Fmt.iso(it) }
             DownloadManager.enqueue(
                 DownloadSpec(
                     url = info.sourceUrl, title = info.title, thumbnail = info.thumbnail,
                     mode = if (audio) DownloadMode.AUDIO else DownloadMode.VIDEO,
                     formatSelector = option?.formatSelector,
-                    qualityLabel = if (audio) "صوت ${ui.audioFormat.uppercase()}" else option!!.label,
+                    qualityLabel = label,
                     audioFormat = ui.audioFormat, playlistItems = items,
-                    expectedBytes = if (audio) info.audioSizeBytes else option?.sizeBytes,
-                    durationSec = info.durationSec,
+                    expectedBytes = fullSize?.let { (it * fraction).toLong() },
+                    durationSec = if (trim != null) trim.second - trim.first else info.durationSec,
+                    audioLang = ui.audioLang.takeIf { single && info.audioTracks.isNotEmpty() },
+                    subLang = ui.subtitle?.lang.takeIf { single && !audio },
+                    subAuto = ui.subtitle?.auto == true,
+                    subEmbed = ui.subEmbed,
+                    trimStart = trim?.first, trimEnd = trim?.second,
                 )
             )
             count = items?.size ?: 1
         }
+        History.record(info.sourceUrl, info.mediaKey, info.title, info.thumbnail, label, info.platform)
+        _ui.update { it.copy(duplicate = History.find(info.sourceUrl, info.mediaKey)) }
         _events.tryEmit(HomeEvent.Enqueued(count))
     }
 }

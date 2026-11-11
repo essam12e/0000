@@ -24,8 +24,10 @@ android {
         applicationId = "com.downloader.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
+        // مهلة تحليل الرابط: 4 دقائق؛ أطول في نسخة المحاكي البرمجي لأنه أبطأ بعشرات المرات.
+        buildConfigField("long", "ANALYZE_TIMEOUT_MS", if (emulatorAbi) "1800000L" else "240000L")
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
             if (emulatorAbi) abiFilters += "x86_64"

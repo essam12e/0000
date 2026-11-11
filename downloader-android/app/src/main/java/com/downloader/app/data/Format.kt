@@ -50,6 +50,26 @@ object Fmt {
         }
     }
 
+    /** «1:02:03» أو «2:15» أو «90» → ثوانٍ. يعيد null إذا كان النص غير صالح. */
+    fun parseTime(text: String): Long? {
+        val parts = text.trim().split(':').map { it.trim().toLongOrNull() ?: return null }
+        if (parts.isEmpty() || parts.size > 3 || parts.any { it < 0 }) return null
+        return parts.fold(0L) { acc, v -> acc * 60 + v }
+    }
+
+    fun clock(sec: Long): String = duration(sec) ?: "0:00"
+
+    fun date(millis: Long): String =
+        java.text.SimpleDateFormat("d MMM yyyy · HH:mm", Locale("ar")).format(java.util.Date(millis))
+            .map { c -> if (c in '\u0660'..'\u0669') '0' + (c - '\u0660') else c }.joinToString("")
+
+    /** اسم اللغة بالعربية من رمزها (ar → العربية، en-US → الإنجليزية (الولايات المتحدة)). */
+    fun language(code: String): String {
+        val clean = code.removeSuffix("-orig")
+        val name = runCatching { Locale.forLanguageTag(clean).getDisplayName(Locale("ar")) }.getOrNull()
+        return if (name.isNullOrBlank() || name.equals(clean, true)) code else name
+    }
+
     fun percent(p: Float): String = String.format(Locale.US, "%d%%", (p * 100).toInt().coerceIn(0, 100))
 
     /** يحوّل سرعة yt-dlp مثل «1.20MiB/s» إلى «1.2 م.ب/ث». */
@@ -76,6 +96,7 @@ object Mime {
         "mp4" to "video/mp4", "m4v" to "video/mp4", "mkv" to "video/x-matroska", "webm" to "video/webm",
         "mov" to "video/quicktime", "3gp" to "video/3gpp", "ts" to "video/mp2t", "flv" to "video/x-flv",
         "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "png" to "image/png", "webp" to "image/webp",
+        "srt" to "application/x-subrip", "vtt" to "text/vtt", "ass" to "text/x-ssa", "lrc" to "text/plain",
         "gif" to "image/gif", "heic" to "image/heic", "avif" to "image/avif", "bmp" to "image/bmp",
     )
 
@@ -108,3 +129,22 @@ private val urlRegex = Regex("""https?://[^\s<>"']+""", RegexOption.IGNORE_CASE)
 /** يستخرج أول رابط من نص (مفيد لنصوص المشاركة التي تحتوي عنواناً + رابطاً). */
 fun extractUrl(text: String?): String? =
     text?.let { urlRegex.find(it)?.value?.trimEnd('.', ',', ')', ']', '!', '؟', '،') }
+
+/** أسماء ملفات آمنة للتخزين. */
+fun safeFileName(name: String): String =
+    name.replace(Regex("""[\\/:*?"<>|\u0000-\u001f]"""), "_").trim().trim('.').take(120).ifBlank { "file" }
+
+/** صيغة موحّدة للرابط لكشف التكرار: بلا وسوم تتبّع ولا شرطة أخيرة. */
+fun normalizeUrl(url: String): String {
+    val noFragment = url.trim().substringBefore('#')
+    val base = noFragment.substringBefore('?').trimEnd('/')
+    val query = noFragment.substringAfter('?', "").split('&')
+        .filter { it.isNotBlank() }
+        .filterNot { q ->
+            val k = q.substringBefore('=').lowercase()
+            k.startsWith("utm_") || k in setOf("si", "igshid", "igsh", "fbclid", "feature", "share", "ref", "ref_src", "s", "t", "pp")
+        }.sorted()
+    val schemeless = base.replaceFirst(Regex("^https?://(www\\.|m\\.)?", RegexOption.IGNORE_CASE), "").lowercase()
+        .let { if (it.startsWith("youtu.be/")) "youtube.com/watch?v=" + it.removePrefix("youtu.be/") else it }
+    return if (query.isEmpty() || schemeless.contains("?")) schemeless else schemeless + "?" + query.joinToString("&")
+}

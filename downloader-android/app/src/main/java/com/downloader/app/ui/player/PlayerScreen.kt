@@ -123,7 +123,7 @@ fun PlayerScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            QuietButton("حفظ للمعرض", onSave, Modifier.weight(1f), icon = Icons.Rounded.SaveAlt, loading = saving)
+            QuietButton("حفظ في الجهاز", onSave, Modifier.weight(1f), icon = Icons.Rounded.SaveAlt, loading = saving)
             RoundIconButton(Icons.Rounded.Share, "مشاركة", onShare, Modifier.size(52.dp))
             RoundIconButton(Icons.Rounded.DeleteOutline, "حذف", onDelete, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.error)
         }

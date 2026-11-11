@@ -43,6 +43,20 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.Subtitles
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.RangeSlider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.downloader.app.data.HistoryEntry
+import com.downloader.app.ui.components.AppDialog
+import com.downloader.app.ui.components.AppTextField
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentPaste
@@ -165,6 +179,7 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                 is HomeState.Ready -> {
                     val info = state.info
                     item("media") { MediaCard(info) }
+                    ui.duplicate?.let { prev -> item("duplicate") { DuplicateBanner(prev) } }
                     if (info.isDirect) {
                         item("direct") { DirectSummary(info) }
                     } else {
@@ -196,6 +211,9 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                             if (info.videoOptions.isNotEmpty() && info.hasAudio) {
                                 ModeToggle(ui.audioMode, vm::setAudioMode)
                                 Spacer(Modifier.height(16.dp))
+                            }
+                            if (!info.isPlaylist) {
+                                OptionsCard(info, ui, vm)
                             }
                         }
                         if (ui.audioMode || info.videoOptions.isEmpty()) {
@@ -239,11 +257,19 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                         info.isDirect -> listOfNotNull("ملف مباشر", info.directFiles.first().sizeBytes?.let { Fmt.bytes(it) }).joinToString("  ·  ") { Fmt.iso(it) }
                         info.viaGallery -> if (info.items.size > 1) "${ui.selectedItems.size} من ${info.items.size}  ·  الجودة الأصلية" else "الجودة الأصلية"
                         info.isPlaylist -> "${ui.selectedItems.size} من ${info.items.size}  ·  " + (if (audio) "صوت ${ui.audioFormat.uppercase()}" else option?.label.orEmpty())
-                        audio -> listOfNotNull("صوت ${ui.audioFormat.uppercase()}", info.audioSizeBytes?.let { "نحو " + Fmt.bytes(it) }).joinToString("  ·  ") { Fmt.iso(it) }
-                        else -> listOfNotNull(option?.label, option?.sizeBytes?.let { (if (option.sizeApprox) "نحو " else "") + Fmt.bytes(it) }).joinToString("  ·  ") { Fmt.iso(it) }
+                        else -> {
+                            val trimmed = ui.trimStart != null && ui.trimEnd != null && (info.durationSec ?: 0) > 0
+                            val fraction = if (trimmed) (ui.trimEnd!! - ui.trimStart!!).toDouble() / info.durationSec!! else 1.0
+                            val size = (if (audio) info.audioSizeBytes else option?.sizeBytes)?.let { (it * fraction).toLong() }
+                            listOfNotNull(
+                                if (audio) "صوت ${ui.audioFormat.uppercase()}" else option?.label,
+                                if (trimmed) "مقطع ${Fmt.clock(ui.trimEnd!! - ui.trimStart!!)}" else null,
+                                size?.let { (if (audio || trimmed || option?.sizeApprox == true) "نحو " else "") + Fmt.bytes(it) },
+                            ).joinToString("  ·  ") { Fmt.iso(it) }
+                        }
                     }
                     GoldButton(
-                        "تحميل", vm::download, Modifier.fillMaxWidth(), icon = Icons.Rounded.Download, caption = caption,
+                        "تحميل", { vm.download() }, Modifier.fillMaxWidth(), icon = Icons.Rounded.Download, caption = caption,
                         enabled = !info.isPlaylist || ui.selectedItems.isNotEmpty(),
                     )
                 }
@@ -360,7 +386,7 @@ private fun IdleHints() {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Tip("١", "انسخ الرابط من أي تطبيق وألصقه هنا.")
                 Tip("٢", "أو اضغط «مشاركة» في التطبيق الآخر واختر داونلودر.")
-                Tip("٣", "الملف يبقى داخل التطبيق حتى تضغط «حفظ للمعرض».")
+                Tip("٣", "الملف يبقى داخل التطبيق حتى تضغط «حفظ في الجهاز».")
             }
         }
     }
@@ -658,5 +684,190 @@ private fun PlaylistRow(item: PlaylistItem, checked: Boolean, onToggle: () -> Un
             contentAlignment = Alignment.Center,
         ) { if (checked) Icon(Icons.Rounded.Check, null, tint = extra.onGold, modifier = Modifier.size(16.dp)) }
         Spacer(Modifier.width(6.dp))
+    }
+}
+
+@Composable
+private fun DuplicateBanner(previous: HistoryEntry) {
+    Row(
+        Modifier.padding(top = 14.dp).fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.shapes.medium)
+            .border(1.dp, AppTheme.extra.gold.copy(alpha = 0.35f), MaterialTheme.shapes.medium)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.History, null, tint = AppTheme.extra.gold, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text("سبق أن حمّلت هذا الرابط", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                listOfNotNull(Fmt.date(previous.at), previous.label.takeIf { it.isNotBlank() }).joinToString("  ·  ") { Fmt.iso(it) },
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** خيارات إضافية للفيديو المفرد: مسار الصوت، الترجمة، قصّ مقطع. تظهر فقط عندما تكون متاحة. */
+@Composable
+private fun OptionsCard(info: MediaInfo, ui: HomeUi, vm: HomeViewModel) {
+    var dialog by remember { mutableStateOf<String?>(null) }
+    val showAudio = info.audioTracks.isNotEmpty()
+    val showSubs = info.subtitles.isNotEmpty() && !ui.audioMode
+    val duration = info.durationSec ?: 0
+    val showTrim = duration > 1
+    if (!showAudio && !showSubs && !showTrim) return
+
+    Surface(
+        Modifier.padding(bottom = 18.dp).fillMaxWidth(), shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column {
+            var first = true
+            @Composable
+            fun Row_(icon: ImageVector, title: String, value: String, active: Boolean, key: String) {
+                if (!first) Box(Modifier.padding(horizontal = 14.dp).fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                first = false
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 54.dp).clickable { dialog = key }.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(icon, null, tint = if (active) AppTheme.extra.gold else AppTheme.extra.dim, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        value, style = MaterialTheme.typography.labelMedium,
+                        color = if (active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, null, tint = AppTheme.extra.dim, modifier = Modifier.size(18.dp))
+                }
+            }
+            if (showAudio) {
+                val track = info.audioTracks.firstOrNull { it.lang == ui.audioLang }
+                Row_(Icons.Rounded.RecordVoiceOver, "مسار الصوت",
+                    track?.let { Fmt.language(it.lang) + if (it.original) " (الأصلي)" else "" } ?: "الافتراضي", track != null && !track.original, "audio")
+            }
+            if (showSubs) {
+                Row_(Icons.Rounded.Subtitles, "الترجمة",
+                    ui.subtitle?.let { Fmt.language(it.lang) + "  ·  " + if (ui.subEmbed) "مدمجة" else "ملف SRT" } ?: "بدون", ui.subtitle != null, "subs")
+            }
+            if (showTrim) {
+                val on = ui.trimStart != null && ui.trimEnd != null
+                Row_(Icons.Rounded.ContentCut, "قصّ مقطع",
+                    if (on) Fmt.iso("${Fmt.clock(ui.trimStart!!)} – ${Fmt.clock(ui.trimEnd!!)}") else "الفيديو كاملاً", on, "trim")
+            }
+        }
+    }
+
+    when (dialog) {
+        "audio" -> AppDialog("مسار الصوت", onDismiss = { dialog = null }, dismissText = "إغلاق") {
+            info.audioTracks.forEach { t ->
+                ChoiceRow(Fmt.language(t.lang), if (t.original) "الأصلي" else null, t.lang == ui.audioLang) { vm.setAudioLang(t.lang); dialog = null }
+            }
+        }
+        "subs" -> {
+            var embed by remember { mutableStateOf(ui.subEmbed) }
+            AppDialog("الترجمة", onDismiss = { dialog = null }, dismissText = "إغلاق") {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(12.dp)).padding(3.dp),
+                ) {
+                    listOf(true to "دمج داخل الفيديو", false to "ملف SRT مستقل").forEach { (value, label) ->
+                        Box(
+                            Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(9.dp))
+                                .background(if (embed == value) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent)
+                                .clickable { embed = value; if (ui.subtitle != null) vm.setSubtitle(ui.subtitle, value) },
+                            contentAlignment = Alignment.Center,
+                        ) { Text(label, style = MaterialTheme.typography.labelMedium, color = if (embed == value) AppTheme.extra.gold else MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                }
+                Text(
+                    if (embed) "تُضاف كمسار داخل الملف يمكن إظهاره أو إخفاؤه من المشغّل." else "يُحفظ ملف الترجمة بجانب الفيديو باسمه نفسه.",
+                    style = MaterialTheme.typography.bodySmall, color = AppTheme.extra.dim, modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                )
+                ChoiceRow("بدون ترجمة", null, ui.subtitle == null) { vm.setSubtitle(null, embed); dialog = null }
+                info.subtitles.forEach { t ->
+                    ChoiceRow(Fmt.language(t.lang), if (t.auto) "آلية" else null, t == ui.subtitle) { vm.setSubtitle(t, embed); dialog = null }
+                }
+            }
+        }
+        "trim" -> TrimDialog(
+            duration, ui.trimStart, ui.trimEnd,
+            onApply = { a, b -> vm.setTrim(a, b); dialog = null },
+            onClear = { vm.setTrim(null, null); dialog = null },
+            onDismiss = { dialog = null },
+        )
+    }
+}
+
+@Composable
+private fun ChoiceRow(label: String, badge: String?, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(MaterialTheme.shapes.small).clickable(onClick = onClick).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+        if (badge != null) {
+            Spacer(Modifier.width(8.dp))
+            Badge(badge)
+        }
+        Spacer(Modifier.weight(1f))
+        if (selected) Icon(Icons.Rounded.Check, null, tint = AppTheme.extra.gold, modifier = Modifier.size(20.dp))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrimDialog(duration: Long, start: Long?, end: Long?, onApply: (Long, Long) -> Unit, onClear: () -> Unit, onDismiss: () -> Unit) {
+    var range by remember { mutableStateOf((start ?: 0L).toFloat()..(end ?: duration).toFloat()) }
+    var from by remember { mutableStateOf(Fmt.clock(start ?: 0L)) }
+    var to by remember { mutableStateOf(Fmt.clock(end ?: duration)) }
+    val a = Fmt.parseTime(from)
+    val b = Fmt.parseTime(to)
+    val valid = a != null && b != null && a < b && b <= duration
+    AppDialog(
+        "قصّ مقطع", onDismiss = onDismiss,
+        confirmText = "تطبيق", onConfirm = { if (valid) onApply(a!!, b!!) },
+        dismissText = if (start != null) "إلغاء القصّ" else "إغلاق",
+        onDismissButton = if (start != null) onClear else null,
+    ) {
+        Text("اختر بداية ونهاية الجزء الذي تريد تحميله. مدة الفيديو ${Fmt.clock(duration)}.",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        // شريط الزمن يبقى من اليسار لليمين كما في كل المشغّلات.
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            RangeSlider(
+                value = range,
+                onValueChange = { r ->
+                    val s = r.start.toLong().coerceIn(0, duration - 1)
+                    val e = r.endInclusive.toLong().coerceIn(s + 1, duration)
+                    range = s.toFloat()..e.toFloat()
+                    from = Fmt.clock(s); to = Fmt.clock(e)
+                },
+                valueRange = 0f..duration.toFloat(),
+                colors = SliderDefaults.colors(
+                    thumbColor = AppTheme.extra.gold, activeTrackColor = AppTheme.extra.gold,
+                    inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                ),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("من", style = MaterialTheme.typography.labelSmall, color = AppTheme.extra.dim)
+                AppTextField(from, { v -> from = v; Fmt.parseTime(v)?.let { t -> if (t < range.endInclusive) range = t.toFloat()..range.endInclusive } }, ltr = true)
+            }
+            Column(Modifier.weight(1f)) {
+                Text("إلى", style = MaterialTheme.typography.labelSmall, color = AppTheme.extra.dim)
+                AppTextField(to, { v -> to = v; Fmt.parseTime(v)?.let { t -> if (t > range.start && t <= duration) range = range.start..t.toFloat() } }, ltr = true)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            if (valid) "مدة المقطع ${Fmt.clock(b!! - a!!)}. القصّ يتم عند أقرب نقطة قطع في الفيديو، فقد يزيد أو ينقص ثوانيَ قليلة."
+            else "اكتب الوقت بصيغة دقائق:ثوانٍ (مثل 1:30) وتأكد أن النهاية بعد البداية وضمن مدة الفيديو.",
+            style = MaterialTheme.typography.bodySmall, color = if (valid) AppTheme.extra.dim else MaterialTheme.colorScheme.error,
+        )
     }
 }

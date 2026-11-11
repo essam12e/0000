@@ -13,21 +13,26 @@ import java.io.File
 import java.io.IOException
 
 /**
- * «حفظ للمعرض»: ينسخ الملف إلى المعرض عبر MediaStore ثم — بعد التحقق من نجاح النسخ فقط —
- * يحذفه من مساحة التطبيق. أي فشل يُبقي الملف الأصلي كما هو.
+ * «حفظ في الجهاز»: ينسخ الملف إلى مجلد واحد منظّم داخل التنزيلات:
+ *
+ *     Download/داونلودر/فيديو   ·   صوتيات   ·   صور   ·   أخرى
+ *
+ * ثم — بعد التحقق من نجاح النسخ فقط — يحذفه من مساحة التطبيق. أي فشل يُبقي الملف الأصلي كما هو.
+ * يُستخدم MediaStore.Downloads لأنه المكان الوحيد الذي يقبل كل الأنواع في مجلد واحد
+ * بدون أي صلاحية تخزين على أندرويد 10+.
  */
 object GallerySaver {
-    private const val FOLDER = "Downloader"
+    const val ROOT = "داونلودر"
 
-    /** أسماء آمنة للتخزين المشترك (بعض الأدوات تضع «:» أو «?» في الاسم). */
-    private fun safeName(name: String): String = name.replace(Regex("""[\\/:*?"<>|]"""), "_")
-
-    private fun publicDir(kind: MediaKind): String = when (kind) {
-        MediaKind.VIDEO -> Environment.DIRECTORY_MOVIES
-        MediaKind.IMAGE -> Environment.DIRECTORY_PICTURES
-        MediaKind.AUDIO -> Environment.DIRECTORY_MUSIC
-        MediaKind.OTHER -> Environment.DIRECTORY_DOWNLOADS
+    fun folderOf(kind: MediaKind): String = when (kind) {
+        MediaKind.VIDEO -> "فيديو"
+        MediaKind.AUDIO -> "صوتيات"
+        MediaKind.IMAGE -> "صور"
+        MediaKind.OTHER -> "أخرى"
     }
+
+    /** المسار كما يراه المستخدم في تطبيق الملفات. */
+    fun displayPath(kind: MediaKind): String = "التنزيلات ‹ $ROOT ‹ ${folderOf(kind)}"
 
     suspend fun saveAndRemove(context: Context, item: LibraryItem): Result<Uri> = withContext(Dispatchers.IO) {
         runCatching {
@@ -43,20 +48,14 @@ object GallerySaver {
 
     private fun saveScoped(context: Context, item: LibraryItem, src: File): Uri {
         val resolver = context.contentResolver
-        val volume = MediaStore.VOLUME_EXTERNAL_PRIMARY
-        val collection = when (item.kind) {
-            MediaKind.VIDEO -> MediaStore.Video.Media.getContentUri(volume)
-            MediaKind.IMAGE -> MediaStore.Images.Media.getContentUri(volume)
-            MediaKind.AUDIO -> MediaStore.Audio.Media.getContentUri(volume)
-            MediaKind.OTHER -> MediaStore.Downloads.getContentUri(volume)
-        }
+        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, safeName(src.name))
+            put(MediaStore.MediaColumns.DISPLAY_NAME, safeFileName(src.name))
             put(MediaStore.MediaColumns.MIME_TYPE, item.mime)
-            put(MediaStore.MediaColumns.RELATIVE_PATH, "${publicDir(item.kind)}/$FOLDER")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$ROOT/${folderOf(item.kind)}")
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val uri = resolver.insert(collection, values) ?: throw IOException("تعذّر إنشاء الملف في المعرض")
+        val uri = resolver.insert(collection, values) ?: throw IOException("تعذّر إنشاء الملف")
         try {
             var copied = 0L
             resolver.openOutputStream(uri)?.use { out ->
@@ -70,7 +69,7 @@ object GallerySaver {
                     }
                     out.flush()
                 }
-            } ?: throw IOException("تعذّر فتح الملف في المعرض")
+            } ?: throw IOException("تعذّر فتح الملف للكتابة")
             if (copied != src.length()) throw IOException("النسخ غير مكتمل")
             resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
             return uri
@@ -82,12 +81,14 @@ object GallerySaver {
 
     @Suppress("DEPRECATION")
     private fun saveLegacy(context: Context, item: LibraryItem, src: File): Uri {
-        val dir = File(Environment.getExternalStoragePublicDirectory(publicDir(item.kind)), FOLDER)
+        val base = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val dir = File(File(base, ROOT), folderOf(item.kind))
         if (!dir.exists() && !dir.mkdirs()) throw IOException("تعذّر إنشاء مجلد الحفظ")
-        var dest = File(dir, safeName(src.name))
+        val name = safeFileName(src.name)
+        var dest = File(dir, name)
         var i = 1
         while (dest.exists()) {
-            dest = File(dir, safeName("${src.nameWithoutExtension} ($i).${src.extension}"))
+            dest = File(dir, "${name.substringBeforeLast('.')} ($i).${name.substringAfterLast('.', "")}")
             i++
         }
         try {

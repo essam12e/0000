@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -37,10 +38,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -304,6 +307,7 @@ fun AppDialog(
     onConfirm: (() -> Unit)? = null,
     dismissText: String = "إلغاء",
     danger: Boolean = false,
+    onDismissButton: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
@@ -314,14 +318,14 @@ fun AppDialog(
             Column(Modifier.padding(22.dp)) {
                 Text(title, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(10.dp))
-                content()
+                Column(Modifier.heightIn(max = 400.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) { content() }
                 Spacer(Modifier.height(20.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (confirmText != null && onConfirm != null) {
                         if (danger) QuietButton(confirmText, onConfirm, Modifier.weight(1f), tint = MaterialTheme.colorScheme.error, compact = true)
                         else GoldButton(confirmText, onConfirm, Modifier.weight(1f).heightIn(min = 44.dp))
                     }
-                    QuietButton(dismissText, onDismiss, Modifier.weight(1f), compact = true)
+                    QuietButton(dismissText, onDismissButton ?: onDismiss, Modifier.weight(1f), compact = true)
                 }
             }
         }
@@ -332,3 +336,53 @@ fun AppDialog(
 fun OneLine(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     Text(text, modifier = modifier, style = MaterialTheme.typography.bodySmall, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
+
+/** حقل نص بهوية التطبيق (بحث، إعادة تسمية، إدخال وقت). */
+@Composable
+fun AppTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    leading: ImageVector? = null,
+    ltr: Boolean = false,
+    number: Boolean = false,
+    singleLine: Boolean = true,
+    onDone: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    var focused by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val border = if (focused) AppTheme.extra.gold.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outline
+    Row(
+        modifier.heightIn(min = 48.dp).clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, border, MaterialTheme.shapes.small).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (leading != null) {
+            Icon(leading, null, tint = AppTheme.extra.dim, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+        }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = AppTheme.extra.dim, maxLines = 1)
+            androidx.compose.foundation.text.BasicTextField(
+                value = value, onValueChange = onValueChange, singleLine = singleLine,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textDirection = if (ltr) androidx.compose.ui.text.style.TextDirection.Ltr else androidx.compose.ui.text.style.TextDirection.Content,
+                    textAlign = if (ltr) TextAlign.Center else TextAlign.Start,
+                ),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(AppTheme.extra.gold),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = if (number) androidx.compose.ui.text.input.KeyboardType.Number else androidx.compose.ui.text.input.KeyboardType.Text,
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { onDone?.invoke() }),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
+                    .onFocusChanged { focused = it.isFocused },
+            )
+        }
+        trailing?.invoke()
+    }
+}
+

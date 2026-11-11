@@ -107,7 +107,8 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
     var message by remember { mutableStateOf<String?>(null) }
     var deleteFromPlayer by remember { mutableStateOf<LibraryItem?>(null) }
 
-    val items by libraryVm.items.collectAsStateWithLifecycle()
+    val items by libraryVm.allItems.collectAsStateWithLifecycle()
+    var duplicate by remember { mutableStateOf<com.downloader.app.data.HistoryEntry?>(null) }
     val tasks by libraryVm.tasks.collectAsStateWithLifecycle()
     val saving by libraryVm.saving.collectAsStateWithLifecycle()
     val playing = items.firstOrNull { it.id == playingId }
@@ -117,7 +118,7 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
     // صلاحية التخزين: أندرويد 9 وأقدم فقط، وعند الحفظ للمعرض فقط.
     var pendingSave by remember { mutableStateOf<(() -> Unit)?>(null) }
     val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) pendingSave?.invoke() else message = "لا يمكن الحفظ للمعرض بدون صلاحية التخزين"
+        if (granted) pendingSave?.invoke() else message = "لا يمكن الحفظ في الجهاز بدون صلاحية التخزين"
         pendingSave = null
     }
 
@@ -133,6 +134,7 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
 
     LaunchedEffect(Unit) {
         homeVm.events.collect { e ->
+            if (e is HomeEvent.ConfirmDuplicate) duplicate = e.previous
             if (e is HomeEvent.Enqueued) {
                 tab = Tab.LIBRARY
                 message = if (e.count > 1) "بدأ تحميل ${com.downloader.app.data.Fmt.elements(e.count)}" else "بدأ التحميل"
@@ -177,7 +179,8 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
                     libraryVm, bottomInset,
                     onOpen = { playingId = it.id },
                     onSave = { item -> withStorage { libraryVm.saveToGallery(item) } },
-                    onSaveAll = { withStorage { libraryVm.saveAll() } },
+                    onSaveMany = { list -> withStorage { libraryVm.saveMany(list) } },
+                    onReopenUrl = { url -> tab = Tab.HOME; homeVm.onShared(url) },
                 )
                 Tab.SETTINGS -> SettingsScreen(settingsVm, bottomInset, onOpenLogin = { showLogin = true })
             }
@@ -226,6 +229,18 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
                 Text(last, Modifier.padding(horizontal = 18.dp, vertical = 11.dp), style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
             }
+        }
+    }
+
+    duplicate?.let { prev ->
+        AppDialog(
+            "حمّلت هذا من قبل", onDismiss = { duplicate = null }, confirmText = "تحميل مرة أخرى",
+            onConfirm = { duplicate = null; homeVm.download(force = true) },
+        ) {
+            Text(
+                "«${prev.title}»\nآخر تحميل: ${com.downloader.app.data.Fmt.date(prev.at)}" + if (prev.label.isNotBlank()) "\nالجودة: ${prev.label}" else "",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 

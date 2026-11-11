@@ -7,6 +7,7 @@ import coil3.SingletonImageLoader
 import coil3.request.crossfade
 import coil3.video.VideoFrameDecoder
 import com.downloader.app.auth.CookieJarStore
+import com.downloader.app.data.History
 import com.downloader.app.data.Library
 import com.downloader.app.data.SettingsStore
 import com.downloader.app.engine.DownloadManager
@@ -25,6 +26,7 @@ class App : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         Library.init(this)
+        History.init(this)
         CookieJarStore.init(this)
         DownloadService.ensureChannels(this)
         DownloadManager.init(this)
