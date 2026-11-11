@@ -263,7 +263,7 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                             val size = (if (audio) info.audioSizeBytes else option?.sizeBytes)?.let { (it * fraction).toLong() }
                             listOfNotNull(
                                 if (audio) "صوت ${ui.audioFormat.uppercase()}" else option?.label,
-                                if (trimmed) "مقطع ${Fmt.clock(ui.trimEnd!! - ui.trimStart!!)}" else null,
+                                if (trimmed) "${Fmt.clock(ui.trimStart!!)}–${Fmt.clock(ui.trimEnd!!)}" else null,
                                 size?.let { (if (audio || trimmed || option?.sizeApprox == true) "نحو " else "") + Fmt.bytes(it) },
                             ).joinToString("  ·  ") { Fmt.iso(it) }
                         }

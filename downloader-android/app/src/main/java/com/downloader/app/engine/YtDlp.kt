@@ -163,7 +163,7 @@ object YtDlp {
                 videoOptions = presetOptions(maxSide),
                 isPlaylist = true,
                 items = items,
-                mediaKey = root.str("id")?.let { id -> "${root.str("extractor_key") ?: "x"}:$id" },
+                mediaKey = root.str("id")?.takeIf { root.str("extractor_key") != "Generic" }?.let { id -> "${root.str("extractor_key") ?: "x"}:$id" },
             )
         }
         return parseSingle(url, root)
@@ -305,7 +305,9 @@ object YtDlp {
             audioSizeBytes = audioSize,
             audioTracks = tracks,
             subtitles = if (options.isEmpty()) emptyList() else subs,
-            mediaKey = o.str("id")?.let { id -> "${o.str("extractor_key") ?: o.str("extractor") ?: "x"}:$id" },
+            // المستخرِج العام يشتق المعرّف من اسم الملف في الرابط، فلا يصلح مفتاحاً (يتكرر بين المواقع).
+            mediaKey = o.str("id")?.takeIf { o.str("extractor_key") != "Generic" }
+                ?.let { id -> "${o.str("extractor_key") ?: o.str("extractor") ?: "x"}:$id" },
         )
     }
 

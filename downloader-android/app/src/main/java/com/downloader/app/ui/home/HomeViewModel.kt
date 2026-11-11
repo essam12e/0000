@@ -250,7 +250,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             val fraction = if (trim != null && (info.durationSec ?: 0) > 0) (trim.second - trim.first).toDouble() / info.durationSec!! else 1.0
             label = listOfNotNull(
                 if (audio) "صوت ${ui.audioFormat.uppercase()}" else option!!.label,
-                trim?.let { "مقطع ${Fmt.clock(it.first)}–${Fmt.clock(it.second)}" },
+                trim?.let { "${Fmt.clock(it.first)}–${Fmt.clock(it.second)}" },
             ).joinToString("  ·  ") { Fmt.iso(it) }
             DownloadManager.enqueue(
                 DownloadSpec(
