@@ -228,7 +228,7 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                                 SectionLabel(
                                     "الجودة",
                                     trailing = if (!info.isPlaylist) Fmt.options(info.videoOptions.size)
-                                    else if (ui.plSampling) "جاري تدقيق الحجم…" else "الحجم لـ ${ui.selectedItems.size} فيديو",
+                                    else if (ui.plSampling) "جاري تدقيق الحجم…" else "إجمالي المحدد (${ui.selectedItems.size})",
                                 )
                                 Spacer(Modifier.height(10.dp))
                             }
