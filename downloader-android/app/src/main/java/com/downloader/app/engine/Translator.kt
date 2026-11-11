@@ -23,12 +23,15 @@ object Translator {
         val source = sourceTag(sourceCode) ?: return null
         val target = TranslateLanguage.fromLanguageTag(targetCode.substringBefore('-').lowercase()) ?: return null
         if (source == target) return lines
-        val translator = Translation.getClient(
-            TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(target).build()
-        )
+        val translator = try {
+            Translation.getClient(TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(target).build())
+        } catch (t: Throwable) {
+            android.util.Log.e("Downloader", "translator init failed", t)
+            return null
+        }
         return try {
             onStage("تجهيز نموذج الترجمة (يُنزَّل مرة واحدة)")
-            Tasks.await(translator.downloadModelIfNeeded(DownloadConditions.Builder().build()), 240, TimeUnit.SECONDS)
+            Tasks.await(translator.downloadModelIfNeeded(DownloadConditions.Builder().build()), 180, TimeUnit.SECONDS)
             val out = ArrayList<String>(lines.size)
             lines.forEachIndexed { i, line ->
                 if (i % 20 == 0) onStage("ترجمة النص على الجهاز (${i * 100 / lines.size.coerceAtLeast(1)}%)")

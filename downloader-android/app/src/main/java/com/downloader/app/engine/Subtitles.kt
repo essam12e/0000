@@ -25,7 +25,7 @@ object Subtitles {
         fun notice(): String? = when {
             videos == 0 -> null
             videos == 1 && translated == 1 -> "تُرجمت الترجمة إلى العربية على جهازك (المنصة لم تُتح ترجمتها)"
-            videos == 1 && original == 1 -> "تعذّرت الترجمة للعربية؛ أُرفقت الترجمة ${originalLang?.let { "بـ" + Fmt.language(it) } ?: "الأصلية"}"
+            videos == 1 && original == 1 -> "تعذّرت الترجمة للعربية؛ أُرفقت الترجمة الأصلية${originalLang?.let { " (" + Fmt.language(it) + ")" } ?: ""}"
             videos == 1 && none == 1 -> "اكتمل التحميل، لكن لا توجد ترجمة متاحة لهذا الفيديو"
             videos > 1 && (translated + original + none) > 0 ->
                 "الترجمة: $platform من المنصة، $translated تُرجمت على الجهاز" +

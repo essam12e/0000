@@ -17,3 +17,11 @@
 -keep class org.apache.commons.compress.** { *; }
 -keep class org.apache.commons.io.** { *; }
 -dontwarn org.apache.commons.io.**
+
+# ML Kit Translation: مكوّناته تُسجَّل وتُنشأ بالانعكاس (بدون هذه القواعد يفشل Translation.getClient بعد التصغير)
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_translate.** { *; }
+-keep class com.google.android.gms.internal.mlkit_common.** { *; }
+-keep class com.google.firebase.components.** { *; }
+-keep class * implements com.google.firebase.components.ComponentRegistrar { *; }
+-dontwarn com.google.mlkit.**
