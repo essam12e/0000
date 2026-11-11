@@ -307,7 +307,7 @@ function resultView(info) {
     const frac = trimmed && info.duration ? (H.trim[1] - H.trim[0]) / info.duration : 1;
     const size = audio ? info.audioSize : opt && opt.size;
     cap = [playlist ? `${H.items.size} من ${info.items.length}` : null, audio ? 'صوت ' + (S.settings.audioFormat || 'mp3').toUpperCase() : opt && opt.label,
-      trimmed ? `${fmt.clock(H.trim[0])}–${fmt.clock(H.trim[1])}` : null, !playlist && size ? fmt.bytes(size * frac) + (audio || trimmed || (opt && opt.approx) ? ' تقريباً' : '') : null,
+      trimmed ? h('span', { dir: 'ltr' }, `${fmt.clock(H.trim[0])}–${fmt.clock(H.trim[1])}`) : null, !playlist && size ? fmt.bytes(size * frac) + (audio || trimmed || (opt && opt.approx) ? ' تقريباً' : '') : null,
       H.sub && !audio ? 'ترجمة ' + H.sub.name : null];
   }
   const disabled = (playlist && H.items.size === 0);
@@ -329,7 +329,7 @@ function optionsBox(info, audio) {
     rows.push(row('subs', 'الترجمة', H.sub ? `${H.sub.name} · ${H.subEmbed ? 'مدمجة' : 'ملف SRT'}${playlist && H.subItems ? ` · ${H.subItems.size} فيديو` : ''}` : 'بدون', !!H.sub, () => subsDialog(info, subChoices)));
   }
   if (info.duration > 1 && !playlist) {
-    rows.push(row('cut', 'قصّ مقطع', H.trim ? `${fmt.clock(H.trim[0])} – ${fmt.clock(H.trim[1])}` : 'الفيديو كاملاً', !!H.trim, () => trimDialog(info)));
+    rows.push(row('cut', 'قصّ مقطع', H.trim ? h('bdi', { dir: 'ltr', class: 'num' }, `${fmt.clock(H.trim[0])} – ${fmt.clock(H.trim[1])}`) : 'الفيديو كاملاً', !!H.trim, () => trimDialog(info)));
   }
   return rows.length ? h('div', { class: 'opts' }, rows) : null;
 }
