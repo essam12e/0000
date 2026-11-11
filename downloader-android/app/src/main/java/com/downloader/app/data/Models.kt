@@ -45,12 +45,14 @@ data class MediaInfo(
     val isPlaylist: Boolean = false,
     val items: List<PlaylistItem> = emptyList(),
     val directFiles: List<DirectFile> = emptyList(),
+    /** النتيجة من gallery-dl: العناصر ملفات أصلية (صور/فيديو) بلا خيارات جودة. */
+    val viaGallery: Boolean = false,
 ) {
     val isDirect get() = directFiles.isNotEmpty()
 }
 
 @Serializable
-enum class DownloadMode { VIDEO, AUDIO, DIRECT }
+enum class DownloadMode { VIDEO, AUDIO, DIRECT, GALLERY }
 
 @Serializable
 data class DownloadSpec(

@@ -19,6 +19,9 @@ import java.io.IOException
 object GallerySaver {
     private const val FOLDER = "Downloader"
 
+    /** أسماء آمنة للتخزين المشترك (بعض الأدوات تضع «:» أو «?» في الاسم). */
+    private fun safeName(name: String): String = name.replace(Regex("""[\\/:*?"<>|]"""), "_")
+
     private fun publicDir(kind: MediaKind): String = when (kind) {
         MediaKind.VIDEO -> Environment.DIRECTORY_MOVIES
         MediaKind.IMAGE -> Environment.DIRECTORY_PICTURES
@@ -48,7 +51,7 @@ object GallerySaver {
             MediaKind.OTHER -> MediaStore.Downloads.getContentUri(volume)
         }
         val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, src.name)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, safeName(src.name))
             put(MediaStore.MediaColumns.MIME_TYPE, item.mime)
             put(MediaStore.MediaColumns.RELATIVE_PATH, "${publicDir(item.kind)}/$FOLDER")
             put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -81,10 +84,10 @@ object GallerySaver {
     private fun saveLegacy(context: Context, item: LibraryItem, src: File): Uri {
         val dir = File(Environment.getExternalStoragePublicDirectory(publicDir(item.kind)), FOLDER)
         if (!dir.exists() && !dir.mkdirs()) throw IOException("تعذّر إنشاء مجلد الحفظ")
-        var dest = File(dir, src.name)
+        var dest = File(dir, safeName(src.name))
         var i = 1
         while (dest.exists()) {
-            dest = File(dir, "${src.nameWithoutExtension} ($i).${src.extension}")
+            dest = File(dir, safeName("${src.nameWithoutExtension} ($i).${src.extension}"))
             i++
         }
         try {

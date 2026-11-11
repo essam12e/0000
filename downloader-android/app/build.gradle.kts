@@ -24,8 +24,8 @@ android {
         applicationId = "com.downloader.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
             if (emulatorAbi) abiFilters += "x86_64"
@@ -96,6 +96,7 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.6.3")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.6.3")
     implementation("io.coil-kt.coil3:coil-video:3.6.3")
+    implementation("me.saket.telephoto:zoomable-image-coil3:0.19.0")
     implementation("com.squareup.okhttp3:okhttp:5.5.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")

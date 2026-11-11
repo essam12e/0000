@@ -14,6 +14,7 @@ import com.downloader.app.data.QualityOption
 import com.downloader.app.data.SettingsStore
 import com.downloader.app.data.extractUrl
 import com.downloader.app.engine.Direct
+import com.downloader.app.engine.GalleryDl
 import com.downloader.app.engine.DownloadManager
 import com.downloader.app.engine.Net
 import com.downloader.app.engine.YtDlp
@@ -142,11 +143,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     YtDlp.analyze(getApplication(), url)
                 } catch (e: AppError) {
                     // منشورات الصور وما لا يدعمه yt-dlp: نجرّب وسوم الصفحة نفسها.
-                    if (e.type == ErrorType.UNSUPPORTED || e.type == ErrorType.GENERIC) Direct.scrapeOpenGraph(url) ?: throw e
-                    else throw e
+                    if (e.type != ErrorType.UNSUPPORTED && e.type != ErrorType.GENERIC) throw e
+                    // 1) gallery-dl للصور والكاروسيل  2) وسوم الصفحة كحل أخير.
+                    val viaGallery = try {
+                        GalleryDl.resolve(getApplication(), url)
+                    } catch (g: AppError) {
+                        if (g.type == ErrorType.PRIVATE) throw g
+                        null
+                    }
+                    viaGallery ?: Direct.scrapeOpenGraph(url) ?: throw e
                 }
                 val s = settings.flow.first()
-                val wantAudio = (s.defaultQuality == -1 && info.hasAudio && !info.isDirect) || (info.videoOptions.isEmpty() && !info.isDirect)
+                val wantAudio = (s.defaultQuality == -1 && info.hasAudio && !info.isDirect) || (info.videoOptions.isEmpty() && !info.isDirect && !info.viaGallery)
                 val selected = pickDefault(info.videoOptions, s.defaultQuality)
                 _ui.update {
                     it.copy(
@@ -197,6 +205,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 count++
             }
+        } else if (info.viaGallery) {
+            val items = ui.selectedItems.sorted().takeIf { it.isNotEmpty() } ?: return
+            DownloadManager.enqueue(
+                DownloadSpec(
+                    url = info.sourceUrl, title = info.title, thumbnail = info.thumbnail,
+                    mode = DownloadMode.GALLERY, qualityLabel = "الجودة الأصلية", playlistItems = items,
+                )
+            )
+            count = items.size
         } else {
             val option = info.videoOptions.firstOrNull { it.id == ui.selectedOptionId } ?: info.videoOptions.firstOrNull()
             val audio = ui.audioMode || option == null

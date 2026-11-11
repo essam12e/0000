@@ -49,6 +49,7 @@ import com.downloader.app.ui.components.QuietButton
 import com.downloader.app.ui.components.RoundIconButton
 import com.downloader.app.ui.library.kindName
 import com.downloader.app.ui.theme.AppTheme
+import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import java.io.File
 
 /** معاينة وتشغيل داخل التطبيق: فيديو/صوت عبر ExoPlayer، وصور عبر Coil. */
@@ -109,7 +110,8 @@ fun PlayerScreen(
                         onRelease = { it.player = null },
                     )
                 }
-                item.kind == MediaKind.IMAGE -> AsyncImage(File(item.path), item.title, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                // تكبير بالقرص والنقر المزدوج (telephoto).
+                item.kind == MediaKind.IMAGE -> ZoomableAsyncImage(File(item.path), item.title, Modifier.fillMaxSize())
                 else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Rounded.InsertDriveFile, null, tint = AppTheme.extra.dim, modifier = Modifier.size(56.dp))
                     Spacer(Modifier.size(12.dp))

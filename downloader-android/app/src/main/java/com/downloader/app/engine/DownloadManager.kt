@@ -126,7 +126,11 @@ object DownloadManager {
     fun cancelAll() = _tasks.value.filter { it.state == TaskState.RUNNING || it.state == TaskState.QUEUED }.forEach { cancel(it.id) }
 
     private fun kill(t: DownloadTask) {
-        if (t.spec.mode == DownloadMode.DIRECT) Direct.cancel(t.id) else YtDlp.cancel(t.id)
+        when (t.spec.mode) {
+            DownloadMode.DIRECT -> Direct.cancel(t.id)
+            DownloadMode.GALLERY -> GalleryDl.cancel(t.id)
+            else -> YtDlp.cancel(t.id)
+        }
     }
 
     /** يحذف الملفات الجزئية لمهمة ملغاة (لا يمسّ ملفات المكتبة المكتملة). */
@@ -177,10 +181,15 @@ object DownloadManager {
                 if (spec.mode == DownloadMode.DIRECT) {
                     dir.mkdirs()
                     Direct.download(app, id, spec.url, File(dir, spec.directName ?: "file"), onProgress)
+                } else if (spec.mode == DownloadMode.GALLERY) {
+                    GalleryDl.download(app, id, spec, dir, onProgress)
                 } else {
                     YtDlp.download(app, id, spec, dir, onProgress)
                 }
-                val files = YtDlp.outputFiles(dir)
+                val files = YtDlp.outputFiles(dir).filter { f ->
+                    // في وضع الصوت: صورة غلاف لم تُضمَّن ليست ملفاً للمستخدم.
+                    spec.mode != DownloadMode.AUDIO || Mime.kindOf(Mime.ofExtension(f.extension)) != MediaKind.IMAGE
+                }
                 if (files.isEmpty()) throw AppError(ErrorType.GENERIC, "لم ينتج عن التحميل أي ملف")
                 Library.add(files.map { f ->
                     val mime = Mime.ofExtension(f.extension)

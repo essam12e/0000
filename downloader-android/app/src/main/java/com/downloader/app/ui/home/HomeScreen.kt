@@ -168,7 +168,7 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                     if (info.isDirect) {
                         item("direct") { DirectSummary(info) }
                     } else {
-                        if (info.isPlaylist) {
+                        if (info.isPlaylist && (!info.viaGallery || info.items.size > 1)) {
                             item("items-label") {
                                 Spacer(Modifier.height(22.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -188,6 +188,9 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                                 }
                             }
                         }
+                        if (info.viaGallery) {
+                            item("gallery") { Stagger(0, "gallery") { OriginalQualityCard(info.items.size) } }
+                        } else {
                         item("mode") {
                             Spacer(Modifier.height(22.dp))
                             if (info.videoOptions.isNotEmpty() && info.hasAudio) {
@@ -210,6 +213,7 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                                 }
                             }
                         }
+                        }
                     }
                 }
             }
@@ -230,9 +234,10 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
             ) {
                 if (info != null) {
                     val option = info.videoOptions.firstOrNull { it.id == ui.selectedOptionId }
-                    val audio = ui.audioMode || (option == null && !info.isDirect)
+                    val audio = ui.audioMode || (option == null && !info.isDirect && !info.viaGallery)
                     val caption = when {
                         info.isDirect -> listOfNotNull("ملف مباشر", info.directFiles.first().sizeBytes?.let { Fmt.bytes(it) }).joinToString("  ·  ") { Fmt.iso(it) }
+                        info.viaGallery -> if (info.items.size > 1) "${ui.selectedItems.size} من ${info.items.size}  ·  الجودة الأصلية" else "الجودة الأصلية"
                         info.isPlaylist -> "${ui.selectedItems.size} من ${info.items.size}  ·  " + (if (audio) "صوت ${ui.audioFormat.uppercase()}" else option?.label.orEmpty())
                         audio -> listOfNotNull("صوت ${ui.audioFormat.uppercase()}", info.audioSizeBytes?.let { "نحو " + Fmt.bytes(it) }).joinToString("  ·  ") { Fmt.iso(it) }
                         else -> listOfNotNull(option?.label, option?.sizeBytes?.let { (if (option.sizeApprox) "نحو " else "") + Fmt.bytes(it) }).joinToString("  ·  ") { Fmt.iso(it) }
@@ -585,6 +590,28 @@ private fun QualityRow(option: QualityOption, selected: Boolean, top: Boolean, o
 }
 
 @Composable
+private fun OriginalQualityCard(count: Int) {
+    Surface(
+        Modifier.padding(top = 18.dp).fillMaxWidth(), shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer, border = BorderStroke(1.dp, AppTheme.extra.gold.copy(alpha = 0.5f)),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.Image, null, tint = AppTheme.extra.gold, modifier = Modifier.size(22.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("الملفات الأصلية", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    if (count > 1) "تُحمَّل العناصر المحددة بجودتها الأصلية كما رُفعت." else "يُحمَّل بجودته الأصلية كما رُفع.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun AudioCard(format: String, size: Long?) {
     Surface(
         Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -618,7 +645,7 @@ private fun PlaylistRow(item: PlaylistItem, checked: Boolean, onToggle: () -> Un
             .clickable(onClick = onToggle).padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Thumb(item.thumbnail, Modifier.size(width = 84.dp, height = 52.dp), fallback = Icons.Rounded.Movie)
+        Thumb(item.thumbnail, Modifier.size(width = 84.dp, height = 52.dp), fallback = if (item.title.contains("صورة")) Icons.Rounded.Image else Icons.Rounded.Movie)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(item.title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (checked) 1f else 0.6f), maxLines = 2, overflow = TextOverflow.Ellipsis)

@@ -48,6 +48,9 @@ object YtDlp {
         }
     }
 
+    /** لبقية المحركات التي تعتمد على بايثون المدمجة (gallery-dl). */
+    suspend fun awaitEngine() = awaitReady()
+
     private suspend fun awaitReady() {
         try {
             ready.await()
@@ -330,6 +333,10 @@ object YtDlp {
                 addOption("-x")
                 addOption("--audio-format", spec.audioFormat)
                 addOption("--audio-quality", "0")
+                // غلاف وبيانات (العنوان/الفنان) داخل ملف الصوت — عبر mutagen المدمجة مع بايثون.
+                addOption("--embed-metadata")
+                addOption("--embed-thumbnail")
+                addOption("--convert-thumbnails", "jpg")
             } else {
                 addOption("-f", spec.formatSelector ?: "bv*+ba/b")
                 // قيد الضلع الأقصر لجودات القوائم (يعمل للأفقي والعمودي)، مع تفضيل H.264/AAC للتوافق.
@@ -358,9 +365,11 @@ object YtDlp {
                     }
                     line.startsWith("[Merger]") -> stage = "دمج الفيديو والصوت"
                     line.startsWith("[ExtractAudio]") -> stage = "تحويل الصوت"
+                    line.startsWith("[EmbedThumbnail]") || line.startsWith("[Metadata]") -> stage = "إضافة الغلاف والبيانات"
                     line.startsWith("[VideoRemuxer]") || line.startsWith("[FixupM") -> stage = "معالجة الملف"
                 }
                 val post = line.startsWith("[Merger]") || line.startsWith("[ExtractAudio]") ||
+                    line.startsWith("[EmbedThumbnail]") || line.startsWith("[Metadata]") || line.startsWith("[ThumbnailsConvertor]") ||
                     line.startsWith("[VideoRemuxer]") || line.startsWith("[FixupM")
                 val p = (percent / 100f).coerceIn(0f, 1f)
                 val within = when {
@@ -390,7 +399,7 @@ object YtDlp {
     /** الملفات النهائية داخل مجلد المهمة (بدون الأجزاء المؤقتة). */
     fun outputFiles(dir: File): List<File> =
         dir.listFiles().orEmpty().filter { f ->
-            f.isFile && f.length() > 0 && f.extension.lowercase() !in setOf("part", "ytdl", "tmp", "temp") &&
+            f.isFile && f.length() > 0 && f.extension.lowercase() !in setOf("part", "ytdl", "tmp", "temp", "sqlite3") &&
                 !f.name.contains(".part-Frag") && !Regex("""\.f\d+\.\w+$""").containsMatchIn(f.name)
         }.sortedBy { it.name }
 
@@ -407,6 +416,7 @@ object YtDlp {
             listOf("login required", "log in", "sign in", "private", "cookies", "registered users", "not available to you",
                 "authentication", "requires authentication", "members-only", "age-restricted", "rate-limit reached",
                 "empty media response", "this content isn't available").any { it in low } -> ErrorType.PRIVATE
+            Regex("""http error 4(04|10)""").containsMatchIn(low) -> ErrorType.UNSUPPORTED
             listOf("unsupported url", "is not a valid url", "no video formats", "no media found", "no video could be found",
                 "there is no video", "no video in this", "unable to extract").any { it in low } -> ErrorType.UNSUPPORTED
             listOf("name resolution", "getaddrinfo", "network is unreachable", "timed out", "connection refused",

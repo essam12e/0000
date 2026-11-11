@@ -6,7 +6,7 @@
 | | |
 |---|---|
 | اسم الحزمة | `com.downloader.app` |
-| الإصدار | 1.0 (versionCode 1) |
+| الإصدار | 1.1 (versionCode 2) |
 | minSdk / targetSdk | 24 (أندرويد 7) / 37 (أندرويد 17) |
 | المعماريات | `arm64-v8a` و `armeabi-v7a` |
 | التقنية | Kotlin 2.4 · Jetpack Compose · Material 3 · MVVM |
@@ -62,6 +62,42 @@ val ytdl = "0.18.1"
 
 ثم أعد البناء. الإصدارات: <https://github.com/JunkFood02/youtubedl-android/releases>
 
+## أدوات مفتوحة المصدر مدمجة
+
+| الأداة | المصدر | الدور | الرخصة |
+|---|---|---|---|
+| yt-dlp | [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) | استخراج وتحميل الفيديو والصوت | Unlicense |
+| youtubedl-android | [JunkFood02/youtubedl-android](https://github.com/JunkFood02/youtubedl-android) | Python + FFmpeg + QuickJS لأندرويد | GPL-3.0 |
+| gallery-dl 1.32.19 | [mikf/gallery-dl](https://github.com/mikf/gallery-dl) | منشورات الصور والكاروسيل (انستجرام، تويتر/X، بنترست…) | GPL-2.0 |
+| requests, urllib3, idna, certifi, charset-normalizer | PyPI | مكتبات يحتاجها gallery-dl | Apache-2.0 / MIT / BSD / MPL-2.0 |
+| mutagen | [quodlibet/mutagen](https://github.com/quodlibet/mutagen) | تضمين الغلاف والعنوان داخل ملفات الصوت (مدمجة مع بايثون المكتبة) | GPL-2.0 |
+| telephoto 0.19.0 | [saket/telephoto](https://github.com/saket/telephoto) | تكبير الصور بالقرص في المعاينة | Apache-2.0 |
+| Coil، Media3 (ExoPlayer)، OkHttp | — | الصور، التشغيل، الشبكة | Apache-2.0 |
+
+**كيف يعمل gallery-dl:** عند فشل yt-dlp في رابط (غالباً لأنه منشور صور) يشغّل التطبيق gallery-dl ببايثون المدمجة نفسها كعملية مستقلة،
+فيعرض العناصر مع اختيارها ثم يحمّلها بجودتها الأصلية. الحزمة في `app/src/main/assets/pytools.zip` وتُفكّ عند أول استخدام.
+
+**تحديث gallery-dl** (يحتاج إعادة بناء):
+
+```bash
+mkdir t && cd t
+pip download gallery-dl requests urllib3 idna certifi charset-normalizer \
+    --no-deps --only-binary=:all: --platform any --python-version 3.12 -d .
+for w in *.whl; do unzip -qo "$w" -d tree; done
+rm -rf tree/*.dist-info tree/*.data
+(cd tree && zip -qr ../../app/src/main/assets/pytools.zip .)
+```
+
+ثم غيّر `BUNDLE_VERSION` في `engine/GalleryDl.kt` حتى تُعاد فكّ الحزمة على الأجهزة.
+
+**تنبيه ترخيص:** التطبيق يتضمن مكوّنات GPL (youtubedl-android، FFmpeg، gallery-dl). إن نشرته للعامة فعليك إتاحة شيفرته المصدرية بشروط GPL.
+
+**أدوات قُيّمت ولم تُدمج:**
+- [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor): استخراج يوتيوب بلا بايثون (أسرع)، لكنه مسار ثانٍ يحتاج صيانة مستقلة ولم يمكن اختباره هنا.
+- aria2c (وحدة جاهزة في youtubedl-android): تحميل متعدد الاتصالات؛ yt-dlp يحمّل الأجزاء بالتوازي أصلاً، ويزيد الحجم نحو 6 م.ب لكل معمارية.
+- [SponsorBlock](https://github.com/ajayyy/SponsorBlock) و [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider): يعتمدان على خادم/API خارجي، وهذا يخالف شرط «كل شيء على الجهاز».
+- [instaloader](https://github.com/instaloader/instaloader): يتداخل مع gallery-dl الذي يغطي انستجرام ومنصات أخرى معه.
+
 ## منطق الحفظ
 
 1. الملف بعد التحميل يُخزَّن في مساحة التطبيق الخاصة (`files/downloads/`) ويظهر في «تحميلاتي» مع معاينة وتشغيل.
@@ -116,7 +152,8 @@ app/src/main/java/com/downloader/app/
 
 ## ملاحظات وحدود معروفة
 
-- **منشورات الصور** (انستجرام، تويتر، بنترست): yt-dlp مخصص للفيديو أساساً. عند فشله يجرّب التطبيق قراءة وسوم `og:image` / `og:video` من الصفحة، وهذا يعطي صورة واحدة غالباً وقد لا ينجح مع المواقع التي تشترط تسجيل الدخول.
+- **منشورات الصور** (انستجرام، تويتر، بنترست): yt-dlp مخصص للفيديو أساساً. عند فشله يجرّب التطبيق gallery-dl، ثم وسوم `og:image` / `og:video` كحل أخير. كثير من هذه المنصات يشترط تسجيل الدخول لعرض المنشورات، وكوكيز انستجرام فقط هي المدعومة حالياً.
+- **كاروسيل انستجرام المختلط** (صور وفيديو معاً): إن نجح yt-dlp فسيعرض مقاطع الفيديو فقط؛ الصور تأتي عبر gallery-dl عندما لا يجد yt-dlp فيديو.
 - **قوائم التشغيل والمنشورات المتعددة**: الجودات فيها عامة (الأعلى / 1080p / 720p…) لأن صيغ كل عنصر لا تُعرف إلا وقت تحميله، ولذلك لا يُعرض حجم تقريبي.
 - **الحجم التقريبي**: يعتمد على ما يعلنه الموقع؛ بعض المواقع لا تعلن حجماً فيظهر «—».
 - **4K على يوتيوب** يأتي بترميز VP9/AV1 داخل MP4، ويعمل على الأجهزة الحديثة؛ الأجهزة القديمة جداً قد لا تشغّله.
@@ -134,5 +171,7 @@ app/src/main/java/com/downloader/app/
 - خدمة Foreground وإشعار التقدّم، الإيقاف المؤقت والاستكمال، والإلغاء مع تنظيف الملفات الجزئية.
 - المشغّل الداخلي، «حفظ للمعرض» و«حفظ الكل» (Pictures / Movies / Music داخل `Downloader`) مع مطابقة البصمة والتأكد من الحذف من التطبيق بعد النجاح.
 - حالات الخطأ: رابط غير مدعوم، لا يوجد إنترنت. وشاشة الإعدادات.
+- (1.1) مسار gallery-dl: رابط يرفضه yt-dlp يتحوّل تلقائياً إلى gallery-dl، ثم التحميل به ومطابقة البصمة، ومعاينة الصورة بـ telephoto، وحفظها للمعرض.
+- (1.1) تحميل MP3 مع تضمين البيانات (العنوان والمصدر ظهرا داخل الملف).
 
-**لم يُختبر فعلياً** (بيئة البناء بلا وصول للمنصات ولا جهاز حقيقي): يوتيوب/انستجرام/تيك توك وبقية المنصات الحقيقية، تسجيل دخول انستجرام والستوري، تحديث yt-dlp من داخل التطبيق، قوائم التشغيل والكاروسيل، اكتشاف الحافظة وزر اللصق، التحميلات المتوازية، أزرار الإشعار، ونسخة ARM نفسها على جهاز حقيقي.
+**لم يُختبر فعلياً** (بيئة البناء بلا وصول للمنصات ولا جهاز حقيقي): gallery-dl مع المنصات الحقيقية ومع منشور متعدد العناصر، وتضمين صورة الغلاف في الصوت (وسائط الاختبار بلا صورة مصغّرة)، يوتيوب/انستجرام/تيك توك وبقية المنصات الحقيقية، تسجيل دخول انستجرام والستوري، تحديث yt-dlp من داخل التطبيق، قوائم التشغيل والكاروسيل، اكتشاف الحافظة وزر اللصق، التحميلات المتوازية، أزرار الإشعار، ونسخة ARM نفسها على جهاز حقيقي.
