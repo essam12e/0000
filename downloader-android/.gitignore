@@ -1,0 +1,14 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+# مفاتيح التوقيع لا تُرفع إلى Git أبداً
+keystore.properties
+keystore/
+*.jks
+*.keystore
+# مخرجات التسليم
+dist/
