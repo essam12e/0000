@@ -301,12 +301,12 @@ fun LibraryScreen(
     }
     confirmDelete?.let { list ->
         AppDialog(
-            if (list.size == 1) "حذف الملف؟" else "حذف ${Fmt.files(list.size)}؟", onDismiss = { confirmDelete = null },
+            if (list.size == 1) "حذف الملف؟" else "حذف الملفات المحددة؟", onDismiss = { confirmDelete = null },
             confirmText = "حذف نهائي", danger = true,
             onConfirm = { if (list.size == 1) vm.delete(list.first()) else vm.deleteMany(list); confirmDelete = null },
         ) {
             Text(
-                (if (list.size == 1) "سيُحذف «${list.first().title}» من التطبيق نهائياً." else "ستُحذف الملفات المحددة من التطبيق نهائياً.") +
+                (if (list.size == 1) "سيُحذف «${list.first().title}» من التطبيق نهائياً." else "ستُحذف ${list.size} ملفات من التطبيق نهائياً.") +
                     " إن أردت الاحتفاظ بها فاحفظها في الجهاز أولاً.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -314,11 +314,11 @@ fun LibraryScreen(
     }
     confirmSave?.let { list ->
         AppDialog(
-            "حفظ ${Fmt.files(list.size)} في الجهاز؟", onDismiss = { confirmSave = null }, confirmText = "حفظ",
+            "حفظ في الجهاز؟", onDismiss = { confirmSave = null }, confirmText = "حفظ",
             onConfirm = { confirmSave = null; onSaveMany(list) },
         ) {
             Text(
-                "تُنسخ إلى «التنزيلات ‹ ${GallerySaver.ROOT}» مرتّبة في مجلدات: فيديو، صوتيات، صور، أخرى. كل ملف ينجح حفظه يُزال من التطبيق، وما يفشل يبقى هنا كما هو.",
+                "عدد الملفات: ${list.size}. تُنسخ إلى «التنزيلات ‹ ${GallerySaver.ROOT}» مرتّبة في مجلدات: فيديو، صوتيات، صور، أخرى. كل ملف ينجح حفظه يُزال من التطبيق، وما يفشل يبقى هنا كما هو.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
