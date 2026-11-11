@@ -125,7 +125,10 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
                     "\nبداخله مجلدات: فيديو، صوتيات، صور، أخرى",
             ) {
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Pill("تغيير") { folderPicker.launch(null) }
+                    Pill("تغيير") {
+                        // بعض الأجهزة (تلفاز، أنظمة مخففة) بلا منتقي ملفات؛ نُعلم المستخدم بدل التعطّل.
+                        runCatching { folderPicker.launch(null) }.onFailure { vm.notify("هذا الجهاز لا يوفّر منتقي مجلدات — يبقى المكان الافتراضي") }
+                    }
                     if (custom) Pill("الافتراضي", onClick = vm::resetSaveFolder)
                 }
             }

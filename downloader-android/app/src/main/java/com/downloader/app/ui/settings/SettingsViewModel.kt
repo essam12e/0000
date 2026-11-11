@@ -66,6 +66,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         _messages.tryEmit("تم تغيير مكان الحفظ")
     }
 
+    fun notify(text: String) { _messages.tryEmit(text) }
+
     fun resetSaveFolder() {
         releaseSaveFolder()
         viewModelScope.launch { store.setSaveTreeUri("") }
