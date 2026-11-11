@@ -2,6 +2,7 @@ package com.downloader.app.engine
 
 import android.content.Context
 import com.downloader.app.auth.CookieJarStore
+import com.downloader.app.BuildConfig
 import com.downloader.app.data.AppError
 import com.downloader.app.data.AudioTrack
 import com.downloader.app.data.SubtitleTrack
@@ -97,6 +98,8 @@ object YtDlp {
                 addOption("--dump-single-json")
                 addOption("--flat-playlist")
                 addOption("--no-playlist")
+                // بدونه لا يُدرج yt-dlp الترجمات المترجمة آلياً من ترجمة يدوية (مثل العربية من الإنجليزية).
+                addOption("--write-auto-subs")
             }
             // التنفيذ حاجز؛ نشغّله كمهمة فرعية حتى يُقتل yt-dlp فوراً إذا ألغى المستخدم أو انتهت المهلة.
             val pid = "analyze-" + UUID.randomUUID()
@@ -285,13 +288,49 @@ object YtDlp {
             .sortedWith(compareBy<AudioTrack>({ !it.original }, { !it.lang.startsWith("ar") }, { !it.lang.startsWith("en") }, { it.lang }))
             .takeIf { it.size > 1 }.orEmpty()
 
-        // الترجمات: اليدوية كلها، والآلية للغات الشائعة فقط (يوتيوب يعرض أكثر من مئة).
-        val manual = (o["subtitles"] as? JsonObject)?.keys.orEmpty().filter { it != "live_chat" && it != "comments" }
+        // الترجمات، مرتبة بحيث تتصدر العربية بأدق مصدر متاح:
+        //   1) يدوية من صاحب المحتوى  2) مترجمة آلياً من ترجمة يدوية  3) مترجمة آلياً من التفريغ الآلي.
+        val manualObj = o["subtitles"] as? JsonObject
+        val autoObj = o["automatic_captions"] as? JsonObject
+        val manual = manualObj?.keys.orEmpty().filter { it != "live_chat" && it != "comments" }
         val common = listOf("ar", "en", "fr", "es", "de", "tr", "ur", "fa", "id", "hi", "ru", "it", "pt", "ja", "ko", "zh-Hans")
-        val autoKeys = (o["automatic_captions"] as? JsonObject)?.keys.orEmpty()
-        val auto = autoKeys.filter { k -> k.endsWith("-orig") || k in common }.filter { it !in manual }
-        val subOrder = compareBy<SubtitleTrack>({ it.auto }, { !it.lang.startsWith("ar") }, { !it.lang.startsWith("en") }, { it.lang })
-        val subs = (manual.map { SubtitleTrack(it, false) } + auto.map { SubtitleTrack(it, true) }).sortedWith(subOrder)
+        val auto = autoObj?.keys.orEmpty().filter { it !in manual }.mapNotNull { k ->
+            // «ar-en» = عربية مترجمة من الترجمة اليدوية الإنجليزية؛ نعرض هذا النوع للعربية والإنجليزية فقط.
+            val src = manual.firstOrNull { m -> k.endsWith("-$m") && k.length > m.length + 1 }
+            when {
+                src != null -> k.removeSuffix("-$src").takeIf { it == "ar" || it == "en" }?.let { SubtitleTrack(k, true, from = src) }
+                k.endsWith("-orig") || k in common -> SubtitleTrack(k, true)
+                else -> null
+            }
+        }
+        val listed = manual.map { SubtitleTrack(it, false) } + auto
+
+        // مسار احتياطي ليوتيوب: إن لم تُدرج أي ترجمة عربية، نطلبها من يوتيوب مباشرة بإضافة tlang=ar
+        // إلى رابط أي ترجمة متاحة (يدوية أولاً لأنها أدق، ثم التفريغ الآلي الأصلي).
+        fun directVtt(obj: JsonObject?, key: String): String? = (obj?.get(key) as? JsonArray)?.mapNotNull { it as? JsonObject }
+            ?.firstOrNull { it.str("ext") == "vtt" && it.str("protocol")?.startsWith("m3u8") != true }?.str("url")
+        val isYoutube = o.str("extractor_key") == "Youtube"
+        val fallback = if (listed.none { it.lang == "ar" || it.lang.startsWith("ar-") } && (isYoutube || BuildConfig.SUB_TEST_URL.isNotEmpty())) {
+            val manualSrc = manual.firstOrNull { directVtt(manualObj, it) != null }
+            val autoSrc = autoObj?.keys.orEmpty().firstOrNull { it.endsWith("-orig") && directVtt(autoObj, it) != null }
+            val base = manualSrc?.let { directVtt(manualObj, it) } ?: autoSrc?.let { directVtt(autoObj, it) }
+            when {
+                BuildConfig.SUB_TEST_URL.isNotEmpty() && !isYoutube -> SubtitleTrack("ar", true, from = "en", url = BuildConfig.SUB_TEST_URL)
+                base != null -> SubtitleTrack(
+                    "ar", true, from = manualSrc ?: autoSrc?.removeSuffix("-orig"),
+                    url = base.replace(Regex("[&?]tlang=[^&]*"), "") + "&tlang=ar",
+                )
+                else -> null
+            }
+        } else null
+
+        fun rank(t: SubtitleTrack): Int {
+            val arabic = t.lang == "ar" || t.lang.startsWith("ar-")
+            val english = t.lang == "en" || t.lang.startsWith("en-")
+            val quality = if (!t.auto) 0 else if (t.from != null && t.from in manual) 1 else 2
+            return (if (arabic) 0 else if (english) 10 else 20) + quality
+        }
+        val subs = (listed + listOfNotNull(fallback)).sortedWith(compareBy<SubtitleTrack>({ rank(it) }, { it.lang }))
 
         return MediaInfo(
             sourceUrl = url,
@@ -332,7 +371,8 @@ object YtDlp {
     /**
      * ينفّذ التحميل (حاجز) داخل [dir]. يُلغى عبر [cancel] بنفس [processId]؛ الملفات الجزئية تبقى للاستكمال.
      */
-    fun download(context: Context, processId: String, spec: DownloadSpec, dir: File, onProgress: (Progress) -> Unit) {
+    fun download(context: Context, processId: String, spec: DownloadSpec, dir: File, onProgress: (Progress) -> Unit): Int {
+        var subsWritten = 0
         runCatching { if (!ready.isCompleted) kotlinx.coroutines.runBlocking { ready.await() } }
             .onFailure { throw AppError(ErrorType.ENGINE, it.message) }
         dir.mkdirs()
@@ -367,14 +407,23 @@ object YtDlp {
             } else {
                 addOption("-f", (spec.formatSelector ?: "bv*+ba/b").replace("{A}", langFilter))
                 // الترجمة: مدمجة داخل الفيديو (مسار قابل للإظهار/الإخفاء) أو ملف SRT مستقل.
-                spec.subLang?.let { lang ->
-                    addOption("--sub-langs", lang)
-                    if (spec.subEmbed) {
-                        addOption("--embed-subs")
-                        if (spec.subAuto) addOption("--write-auto-subs")
+                // (إذا وُجد subUrl يجلب التطبيق الترجمة بنفسه بعد التحميل — انظر Subtitles.kt.)
+                spec.subLang?.takeIf { spec.subUrl == null }?.let { lang ->
+                    if (playlist != null) {
+                        // قائمة: لا نعرف ترجمات كل فيديو مسبقاً → اليدوية إن وُجدت وإلا الآلية/المترجمة.
+                        addOption("--sub-langs", "$lang,$lang-.*")
+                        addOption("--write-subs")
+                        addOption("--write-auto-subs")
+                        if (spec.subEmbed) addOption("--embed-subs") else addOption("--convert-subs", "srt")
                     } else {
-                        addOption(if (spec.subAuto) "--write-auto-subs" else "--write-subs")
-                        addOption("--convert-subs", "srt")
+                        addOption("--sub-langs", lang)
+                        if (spec.subEmbed) {
+                            addOption("--embed-subs")
+                            if (spec.subAuto) addOption("--write-auto-subs")
+                        } else {
+                            addOption(if (spec.subAuto) "--write-auto-subs" else "--write-subs")
+                            addOption("--convert-subs", "srt")
+                        }
                     }
                 }
                 // قيد الضلع الأقصر لجودات القوائم (يعمل للأفقي والعمودي)، مع تفضيل H.264/AAC للتوافق.
@@ -399,6 +448,7 @@ object YtDlp {
         try {
             YoutubeDL.getInstance().execute(request, processId) { percent, eta, line ->
                 itemRegex.find(line)?.let { item = it.groupValues[1].toInt(); phase = 0 }
+                if (line.startsWith("[info] Writing video subtitles")) subsWritten++
                 when {
                     line.startsWith("[download] Destination:") -> {
                         phase++
@@ -436,6 +486,7 @@ object YtDlp {
         } finally {
             cookies?.delete()
         }
+        return subsWritten
     }
 
     fun cancel(processId: String) {

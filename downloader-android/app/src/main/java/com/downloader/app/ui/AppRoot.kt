@@ -144,10 +144,12 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
             }
         }
     }
-    LaunchedEffect(Unit) { merge(libraryVm.messages, settingsVm.messages).collect { message = it } }
+    LaunchedEffect(Unit) {
+        merge(libraryVm.messages, settingsVm.messages, com.downloader.app.engine.DownloadManager.notices).collect { message = it }
+    }
     LaunchedEffect(message) {
         if (message != null) {
-            delay(2800)
+            delay(3800)
             message = null
         }
     }

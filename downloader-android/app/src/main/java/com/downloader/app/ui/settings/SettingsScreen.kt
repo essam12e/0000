@@ -64,6 +64,11 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
     var qualityDialog by remember { mutableStateOf(false) }
     var aboutDialog by remember { mutableStateOf(false) }
     var logoutDialog by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // اختيار مجلد عبر نظام أندرويد نفسه: يمنح التطبيق إذن الكتابة في ذلك المجلد فقط، بلا صلاحية تخزين.
+    val folderPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> if (uri != null) vm.setSaveFolder(uri) }
     LaunchedEffect(Unit) { vm.refresh() }
 
     Column(
@@ -113,7 +118,17 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
         Spacer(Modifier.height(22.dp))
         SectionLabel("التخزين")
         Group {
-            SettingRow("مكان الحفظ", "التنزيلات ‹ داونلودر\nفي مجلدات: فيديو، صوتيات، صور، أخرى") {}
+            val custom = s.saveTreeUri.isNotEmpty()
+            SettingRow(
+                "مكان الحفظ",
+                (if (custom) "مجلد مخصص: ${com.downloader.app.data.GallerySaver.rootLabel(context)}" else "الافتراضي: التنزيلات ‹ داونلودر") +
+                    "\nبداخله مجلدات: فيديو، صوتيات، صور، أخرى",
+            ) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Pill("تغيير") { folderPicker.launch(null) }
+                    if (custom) Pill("الافتراضي", onClick = vm::resetSaveFolder)
+                }
+            }
             Divider()
             SettingRow("مسح الكاش", "ملفات مؤقتة وصور مصغّرة: ${Fmt.bytes(cache.coerceAtLeast(1024))}\nلا يمسّ ملفات «تحميلاتي»") {
                 Pill("مسح", onClick = vm::clearCache)

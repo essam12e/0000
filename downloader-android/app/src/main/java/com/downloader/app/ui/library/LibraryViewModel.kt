@@ -77,7 +77,8 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
             _saving.update { it - item.id }
             _selected.update { it - item.id }
             _messages.tryEmit(
-                if (result.isSuccess) "حُفظ في ${GallerySaver.displayPath(item.kind)}" else "تعذّر الحفظ — الملف ما زال في التطبيق"
+                if (result.isSuccess) "حُفظ في ${GallerySaver.displayPath(getApplication(), item)}"
+                else (result.exceptionOrNull()?.message?.takeIf { it.any { c -> c in '\u0600'..'\u06FF' } } ?: "تعذّر الحفظ") + " — الملف ما زال في التطبيق"
             )
             onDone(result.isSuccess)
         }
@@ -96,7 +97,7 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
                 _selected.update { it - item.id }
             }
             _messages.tryEmit(
-                if (ok == all.size) "حُفظ ${Fmt.files(ok)} في التنزيلات ‹ ${GallerySaver.ROOT}"
+                if (ok == all.size) "حُفظ ${Fmt.files(ok)} في ${GallerySaver.rootLabel(getApplication())}"
                 else "حُفظ $ok من ${all.size} — الباقي ما زال في التطبيق"
             )
         }

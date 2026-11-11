@@ -107,6 +107,7 @@ import com.downloader.app.data.MediaInfo
 import com.downloader.app.data.MediaKind
 import com.downloader.app.data.PlaylistItem
 import com.downloader.app.data.QualityOption
+import com.downloader.app.data.SubtitleTrack
 import com.downloader.app.data.hint
 import com.downloader.app.data.message
 import com.downloader.app.ui.components.Badge
@@ -212,9 +213,7 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
                                 ModeToggle(ui.audioMode, vm::setAudioMode)
                                 Spacer(Modifier.height(16.dp))
                             }
-                            if (!info.isPlaylist) {
-                                OptionsCard(info, ui, vm)
-                            }
+                            OptionsCard(info, ui, vm)
                         }
                         if (ui.audioMode || info.videoOptions.isEmpty()) {
                             item("audio") {
@@ -712,10 +711,13 @@ private fun DuplicateBanner(previous: HistoryEntry) {
 @Composable
 private fun OptionsCard(info: MediaInfo, ui: HomeUi, vm: HomeViewModel) {
     var dialog by remember { mutableStateOf<String?>(null) }
-    val showAudio = info.audioTracks.isNotEmpty()
-    val showSubs = info.subtitles.isNotEmpty() && !ui.audioMode
+    val playlist = info.isPlaylist
+    val showAudio = info.audioTracks.isNotEmpty() && !playlist
+    // في القوائم لا تُعرف ترجمات كل فيديو مسبقاً، فنعرض اللغتين الأهم ويُجلب المتاح وقت التحميل.
+    val subChoices = if (playlist) listOf(SubtitleTrack("ar", true), SubtitleTrack("en", true)) else info.subtitles
+    val showSubs = subChoices.isNotEmpty() && !ui.audioMode && info.videoOptions.isNotEmpty()
     val duration = info.durationSec ?: 0
-    val showTrim = duration > 1
+    val showTrim = duration > 1 && !playlist
     if (!showAudio && !showSubs && !showTrim) return
 
     Surface(
@@ -752,7 +754,10 @@ private fun OptionsCard(info: MediaInfo, ui: HomeUi, vm: HomeViewModel) {
             }
             if (showSubs) {
                 Row_(Icons.Rounded.Subtitles, "الترجمة",
-                    ui.subtitle?.let { Fmt.language(it.lang) + "  ·  " + if (ui.subEmbed) "مدمجة" else "ملف SRT" } ?: "بدون", ui.subtitle != null, "subs")
+                    ui.subtitle?.let {
+                        subName(it) + "  ·  " + (if (ui.subEmbed) "مدمجة" else "ملف SRT") +
+                            if (playlist && ui.subItems != null) "  ·  ${ui.subItems.size} فيديو" else ""
+                    } ?: "بدون", ui.subtitle != null, "subs")
             }
             if (showTrim) {
                 val on = ui.trimStart != null && ui.trimEnd != null
@@ -787,9 +792,49 @@ private fun OptionsCard(info: MediaInfo, ui: HomeUi, vm: HomeViewModel) {
                     if (embed) "تُضاف كمسار داخل الملف يمكن إظهاره أو إخفاؤه من المشغّل." else "يُحفظ ملف الترجمة بجانب الفيديو باسمه نفسه.",
                     style = MaterialTheme.typography.bodySmall, color = AppTheme.extra.dim, modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
                 )
-                ChoiceRow("بدون ترجمة", null, ui.subtitle == null) { vm.setSubtitle(null, embed); dialog = null }
-                info.subtitles.forEach { t ->
-                    ChoiceRow(Fmt.language(t.lang), if (t.auto) "آلية" else null, t == ui.subtitle) { vm.setSubtitle(t, embed); dialog = null }
+                ChoiceRow("بدون ترجمة", null, ui.subtitle == null) { vm.setSubtitle(null, embed); if (!playlist) dialog = null }
+                subChoices.forEach { t ->
+                    ChoiceRow(subName(t), if (playlist) null else subBadge(t), t == ui.subtitle) { vm.setSubtitle(t, embed); if (!playlist) dialog = null }
+                }
+                if (playlist && ui.subtitle != null) {
+                    // نطاق الترجمة داخل القائمة: الكل أو فيديوهات معيّنة.
+                    val chosen = info.items.filter { it.index in ui.selectedItems }
+                    Spacer(Modifier.height(10.dp))
+                    SectionLabel("تُضاف إلى")
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(12.dp)).padding(3.dp)) {
+                        listOf(true to "كل الفيديوهات", false to "فيديوهات معيّنة").forEach { (all, label) ->
+                            val on = (ui.subItems == null) == all
+                            Box(
+                                Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(9.dp))
+                                    .background(if (on) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent)
+                                    .clickable { vm.setSubItems(if (all) null else chosen.map { it.index }.toSet()) },
+                                contentAlignment = Alignment.Center,
+                            ) { Text(label, style = MaterialTheme.typography.labelMedium, color = if (on) AppTheme.extra.gold else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                    }
+                    ui.subItems?.let { picked ->
+                        Spacer(Modifier.height(6.dp))
+                        chosen.forEach { item ->
+                            val on = item.index in picked
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(MaterialTheme.shapes.small)
+                                    .clickable { vm.setSubItems(if (on) picked - item.index else picked + item.index) }.padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    Modifier.size(22.dp).clip(RoundedCornerShape(6.dp))
+                                        .then(if (on) Modifier.background(AppTheme.extra.goldBrush) else Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))),
+                                    contentAlignment = Alignment.Center,
+                                ) { if (on) Icon(Icons.Rounded.Check, null, tint = AppTheme.extra.onGold, modifier = Modifier.size(15.dp)) }
+                                Spacer(Modifier.width(10.dp))
+                                Text(item.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    Text("تُستخدم ترجمة صاحب الفيديو إن وُجدت، وإلا ترجمة المنصة الآلية. الفيديو الذي لا ترجمة له يُحمَّل بدونها.",
+                        style = MaterialTheme.typography.bodySmall, color = AppTheme.extra.dim, modifier = Modifier.padding(top = 10.dp, start = 4.dp, end = 4.dp))
                 }
             }
         }
@@ -870,4 +915,16 @@ private fun TrimDialog(duration: Long, start: Long?, end: Long?, onApply: (Long,
             style = MaterialTheme.typography.bodySmall, color = if (valid) AppTheme.extra.dim else MaterialTheme.colorScheme.error,
         )
     }
+}
+
+/** اسم لغة الترجمة بدون لاحقة المصدر (ar-en → العربية). */
+private fun subName(t: SubtitleTrack): String =
+    Fmt.language(if (t.from != null) t.lang.removeSuffix("-${t.from}") else t.lang)
+
+/** مصدر الترجمة — يحدد دقتها: صاحب المحتوى ← مترجمة من ترجمة يدوية ← مترجمة من التفريغ الآلي. */
+private fun subBadge(t: SubtitleTrack): String = when {
+    !t.auto -> "من صاحب الفيديو"
+    t.from != null -> "مترجمة من ${Fmt.language(t.from)}"
+    t.lang.endsWith("-orig") -> "تفريغ آلي"
+    else -> "ترجمة آلية"
 }

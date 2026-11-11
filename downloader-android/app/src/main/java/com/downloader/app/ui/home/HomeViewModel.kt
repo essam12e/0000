@@ -51,6 +51,8 @@ data class HomeUi(
     val audioLang: String? = null,
     val subtitle: SubtitleTrack? = null,
     val subEmbed: Boolean = true,
+    /** للقوائم: العناصر التي تُضاف لها الترجمة (null = كل العناصر المحددة). */
+    val subItems: Set<Int>? = null,
     val trimStart: Long? = null,
     val trimEnd: Long? = null,
     /** آخر تحميل سابق للمحتوى نفسه إن وُجد. */
@@ -173,7 +175,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         state = HomeState.Ready(info), audioMode = wantAudio, selectedOptionId = selected?.id,
                         selectedItems = info.items.map { item -> item.index }.toSet(),
                         audioLang = info.audioTracks.firstOrNull { t -> t.original }?.lang,
-                        subtitle = null, trimStart = null, trimEnd = null,
+                        subtitle = null, subItems = null, trimStart = null, trimEnd = null,
                         duplicate = History.find(info.sourceUrl, info.mediaKey),
                     )
                 }
@@ -207,6 +209,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setAudioLang(lang: String?) = _ui.update { it.copy(audioLang = lang) }
     fun setSubtitle(track: SubtitleTrack?, embed: Boolean) = _ui.update { it.copy(subtitle = track, subEmbed = embed) }
+    fun setSubItems(items: Set<Int>?) = _ui.update { it.copy(subItems = items) }
     fun setTrim(start: Long?, end: Long?) = _ui.update { it.copy(trimStart = start, trimEnd = end) }
 
     /** [force] = المستخدم أكّد إعادة تحميل محتوى سبق تحميله. */
@@ -252,8 +255,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 if (audio) "صوت ${ui.audioFormat.uppercase()}" else option!!.label,
                 trim?.let { "${Fmt.clock(it.first)}–${Fmt.clock(it.second)}" },
             ).joinToString("  ·  ") { Fmt.iso(it) }
-            DownloadManager.enqueue(
-                DownloadSpec(
+            val sub = ui.subtitle.takeIf { !audio }
+            val base = DownloadSpec(
                     url = info.sourceUrl, title = info.title, thumbnail = info.thumbnail,
                     mode = if (audio) DownloadMode.AUDIO else DownloadMode.VIDEO,
                     formatSelector = option?.formatSelector,
@@ -262,12 +265,21 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                     expectedBytes = fullSize?.let { (it * fraction).toLong() },
                     durationSec = if (trim != null) trim.second - trim.first else info.durationSec,
                     audioLang = ui.audioLang.takeIf { single && info.audioTracks.isNotEmpty() },
-                    subLang = ui.subtitle?.lang.takeIf { single && !audio },
-                    subAuto = ui.subtitle?.auto == true,
+                    subLang = sub?.lang,
+                    subAuto = sub?.auto == true,
                     subEmbed = ui.subEmbed,
+                    subUrl = sub?.url.takeIf { single },
                     trimStart = trim?.first, trimEnd = trim?.second,
                 )
-            )
+            if (items != null && sub != null && ui.subItems != null) {
+                // ترجمة لفيديوهات معيّنة من القائمة: مهمة للمترجَمة وأخرى للبقية.
+                val with = items.filter { it in ui.subItems }
+                val without = items - with.toSet()
+                if (with.isNotEmpty()) DownloadManager.enqueue(base.copy(playlistItems = with, qualityLabel = "$label  ·  مع ترجمة"))
+                if (without.isNotEmpty()) DownloadManager.enqueue(base.copy(playlistItems = without, subLang = null))
+            } else {
+                DownloadManager.enqueue(base)
+            }
             count = items?.size ?: 1
         }
         History.record(info.sourceUrl, info.mediaKey, info.title, info.thumbnail, label, info.platform)

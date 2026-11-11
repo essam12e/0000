@@ -7,6 +7,7 @@ import coil3.SingletonImageLoader
 import coil3.request.crossfade
 import coil3.video.VideoFrameDecoder
 import com.downloader.app.auth.CookieJarStore
+import com.downloader.app.data.GallerySaver
 import com.downloader.app.data.History
 import com.downloader.app.data.Library
 import com.downloader.app.data.SettingsStore
@@ -30,6 +31,11 @@ class App : Application(), SingletonImageLoader.Factory {
         CookieJarStore.init(this)
         DownloadService.ensureChannels(this)
         DownloadManager.init(this)
+        appScope.launch {
+            SettingsStore(this@App).flow.collect { s ->
+                GallerySaver.customTree = s.saveTreeUri.takeIf { it.isNotEmpty() }?.let(android.net.Uri::parse)
+            }
+        }
         appScope.launch(Dispatchers.IO) {
             YtDlp.init(this@App)
             autoUpdateEngine()

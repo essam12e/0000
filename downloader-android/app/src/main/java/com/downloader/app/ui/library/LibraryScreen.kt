@@ -318,7 +318,7 @@ fun LibraryScreen(
             onConfirm = { confirmSave = null; onSaveMany(list) },
         ) {
             Text(
-                "عدد الملفات: ${list.size}. تُنسخ إلى «التنزيلات ‹ ${GallerySaver.ROOT}» مرتّبة في مجلدات: فيديو، صوتيات، صور، أخرى. كل ملف ينجح حفظه يُزال من التطبيق، وما يفشل يبقى هنا كما هو.",
+                "عدد الملفات: ${list.size}. تُنسخ إلى «${GallerySaver.rootLabel(context)}» مرتّبة في مجلدات: فيديو، صوتيات، صور، أخرى. كل ملف ينجح حفظه يُزال من التطبيق، وما يفشل يبقى هنا كما هو.",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

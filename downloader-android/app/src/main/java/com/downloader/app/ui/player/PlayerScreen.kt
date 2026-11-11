@@ -70,6 +70,8 @@ fun PlayerScreen(
         if (!playable) null
         else ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.fromFile(File(item.path))))
+            // الترجمة المدمجة: تُعرض العربية تلقائياً إن وُجدت، وزر CC في المشغّل للتبديل أو الإخفاء.
+            trackSelectionParameters = trackSelectionParameters.buildUpon().setPreferredTextLanguages("ar", "ara").build()
             prepare()
             playWhenReady = true
         }
@@ -101,6 +103,7 @@ fun PlayerScreen(
                                 this.player = player
                                 setShowNextButton(false)
                                 setShowPreviousButton(false)
+                                setShowSubtitleButton(true)
                                 setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                                 if (item.kind == MediaKind.AUDIO) { controllerShowTimeoutMs = 0; controllerHideOnTouch = false }
                                 // عناصر التحكم بالوقت تبقى من اليسار لليمين كما في كل المشغّلات.

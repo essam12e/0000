@@ -54,6 +54,36 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setAudioFormat(v: String) = viewModelScope.launch { store.setAudioFormat(v) }
     fun setParallel(v: Int) = viewModelScope.launch { store.setMaxParallel(v) }
 
+    /** المستخدم اختار مجلداً: نثبّت الإذن ليبقى بعد إعادة التشغيل ثم نحفظه. */
+    fun setSaveFolder(uri: android.net.Uri) {
+        val app = getApplication<Application>()
+        val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        runCatching {
+            releaseSaveFolder()
+            app.contentResolver.takePersistableUriPermission(uri, flags)
+        }.onFailure { _messages.tryEmit("تعذّر استخدام هذا المجلد، اختر مجلداً آخر"); return }
+        viewModelScope.launch { store.setSaveTreeUri(uri.toString()) }
+        _messages.tryEmit("تم تغيير مكان الحفظ")
+    }
+
+    fun resetSaveFolder() {
+        releaseSaveFolder()
+        viewModelScope.launch { store.setSaveTreeUri("") }
+        _messages.tryEmit("عاد مكان الحفظ إلى التنزيلات ‹ داونلودر")
+    }
+
+    private fun releaseSaveFolder() {
+        val app = getApplication<Application>()
+        settings.value.saveTreeUri.takeIf { it.isNotEmpty() }?.let { old ->
+            runCatching {
+                app.contentResolver.releasePersistableUriPermission(
+                    android.net.Uri.parse(old),
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+        }
+    }
+
     fun updateEngine() {
         if (_updating.value) return
         _updating.value = true

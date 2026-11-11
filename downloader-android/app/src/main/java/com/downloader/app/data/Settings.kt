@@ -18,6 +18,8 @@ data class AppSettings(
     val maxParallel: Int = 3,
     val lastEngineUpdate: Long = 0,
     val lastClipboardUrl: String = "",
+    /** مجلد حفظ مخصص اختاره المستخدم (رابط شجرة SAF)، أو فارغ للمكان الافتراضي. */
+    val saveTreeUri: String = "",
 )
 
 class SettingsStore(private val context: Context) {
@@ -27,6 +29,7 @@ class SettingsStore(private val context: Context) {
         val parallel = intPreferencesKey("max_parallel")
         val engineUpdate = longPreferencesKey("last_engine_update")
         val clip = stringPreferencesKey("last_clipboard_url")
+        val saveTree = stringPreferencesKey("save_tree_uri")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map { p ->
@@ -36,6 +39,7 @@ class SettingsStore(private val context: Context) {
             maxParallel = (p[K.parallel] ?: 3).coerceIn(1, 5),
             lastEngineUpdate = p[K.engineUpdate] ?: 0,
             lastClipboardUrl = p[K.clip] ?: "",
+            saveTreeUri = p[K.saveTree] ?: "",
         )
     }
 
@@ -43,6 +47,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setAudioFormat(v: String) = context.store.edit { it[K.audio] = v }
     suspend fun setMaxParallel(v: Int) = context.store.edit { it[K.parallel] = v.coerceIn(1, 5) }
     suspend fun setEngineUpdated(t: Long) = context.store.edit { it[K.engineUpdate] = t }
+    suspend fun setSaveTreeUri(v: String) = context.store.edit { it[K.saveTree] = v }
     suspend fun setLastClipboardUrl(v: String) = context.store.edit { it[K.clip] = v }
 }
 

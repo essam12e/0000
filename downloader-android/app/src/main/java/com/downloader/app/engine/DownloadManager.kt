@@ -45,6 +45,10 @@ object DownloadManager {
     private val _completed = MutableSharedFlow<Pair<String, Int>>(extraBufferCapacity = 16)
     val completed: SharedFlow<Pair<String, Int>> = _completed
 
+    /** تنبيهات غير فاشلة تُعرض للمستخدم (مثل: اكتمل التحميل بلا ترجمة). */
+    private val _notices = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val notices: SharedFlow<String> = _notices
+
     private val jobs = ConcurrentHashMap<String, Job>()
     private val stopReason = ConcurrentHashMap<String, TaskState?>() // PAUSED أو null (إلغاء)
     private val lastEmit = ConcurrentHashMap<String, Long>()
@@ -184,7 +188,17 @@ object DownloadManager {
                 } else if (spec.mode == DownloadMode.GALLERY) {
                     GalleryDl.download(app, id, spec, dir, onProgress)
                 } else {
-                    YtDlp.download(app, id, spec, dir, onProgress)
+                    val written = YtDlp.download(app, id, spec, dir, onProgress)
+                    if (spec.subLang != null) {
+                        val ok = if (spec.subUrl != null) {
+                            onProgress(YtDlp.Progress(0.99f, null, null, "جلب الترجمة"))
+                            Subtitles.fetchAndApply(app, spec.subUrl, spec.subLang, spec.subEmbed, dir)
+                        } else written > 0
+                        if (!ok) _notices.tryEmit("اكتمل التحميل، لكن المنصة لم تُتح الترجمة المطلوبة")
+                        else if (spec.playlistItems != null && written < spec.playlistItems.size) {
+                            _notices.tryEmit("الترجمة توفرت لـ $written من ${spec.playlistItems.size} فيديوهات")
+                        }
+                    }
                 }
                 val files = YtDlp.outputFiles(dir).filter { f ->
                     // في وضع الصوت: صورة غلاف لم تُضمَّن ليست ملفاً للمستخدم.

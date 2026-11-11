@@ -20,7 +20,14 @@ data class QualityOption(
 data class AudioTrack(val lang: String, val original: Boolean)
 
 /** ترجمة متاحة: يدوية من صاحب المحتوى أو مولّدة آلياً. */
-data class SubtitleTrack(val lang: String, val auto: Boolean)
+data class SubtitleTrack(
+    val lang: String,
+    val auto: Boolean,
+    /** لغة المصدر إذا كانت الترجمة مترجمة آلياً من ترجمة أخرى (مثل ar مترجمة من en). */
+    val from: String? = null,
+    /** رابط مباشر يجلبه التطبيق بنفسه عندما لا يُدرج yt-dlp هذه الترجمة (المسار الاحتياطي). */
+    val url: String? = null,
+)
 
 data class PlaylistItem(
     val index: Int,
@@ -83,6 +90,8 @@ data class DownloadSpec(
     val subEmbed: Boolean = true,
     val trimStart: Long? = null,
     val trimEnd: Long? = null,
+    /** إن وُجد: يجلب التطبيق الترجمة من هذا الرابط ويحوّلها/يدمجها بنفسه بعد التحميل. */
+    val subUrl: String? = null,
 )
 
 @Serializable
