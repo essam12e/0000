@@ -133,6 +133,21 @@ func (s *server) routes() http.Handler {
 		s.analyzeMu.Unlock()
 		writeJSON(w, 200, true)
 	})
+	// تحليل فيديو واحد من قائمة كعيّنة لتقدير الحجم (لا يلغي التحليل الرئيسي ولا يُسجَّل).
+	api("/api/sample", func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ URL string }
+		if readJSON(r, &b) != nil || !strings.HasPrefix(b.URL, "http") {
+			writeErr(w, &AppError{Type: "generic", Detail: "طلب غير صالح"})
+			return
+		}
+		info, err := analyze(r.Context(), b.URL)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		normalizeInfo(info)
+		writeJSON(w, 200, map[string]any{"duration": info.Duration, "options": info.Options, "audioSize": info.AudioSize, "isPlaylist": info.IsPlaylist})
+	})
 	api("/api/download", s.download)
 	api("/api/task", func(w http.ResponseWriter, r *http.Request) {
 		var b struct{ ID, Action string }
@@ -342,6 +357,7 @@ func (s *server) analyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	info.Duplicate = history.find(info.SourceURL, info.MediaKey)
+	normalizeInfo(info)
 	writeJSON(w, 200, info)
 }
 
@@ -416,4 +432,23 @@ func (s *server) media(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", it.Mime)
 	http.ServeFile(w, r, it.Path)
+}
+
+// normalizeInfo يضمن أن القوائم الفارغة تُرسل [] لا null (الواجهة تتعامل معها كمصفوفات دائماً).
+func normalizeInfo(info *MediaInfo) {
+	if info.Options == nil {
+		info.Options = []Quality{}
+	}
+	if info.Items == nil {
+		info.Items = []PlaylistItem{}
+	}
+	if info.Direct == nil {
+		info.Direct = []DirectFile{}
+	}
+	if info.AudioTracks == nil {
+		info.AudioTracks = []AudioTrack{}
+	}
+	if info.Subtitles == nil {
+		info.Subtitles = []SubTrack{}
+	}
 }

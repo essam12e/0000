@@ -18,6 +18,7 @@ type PlaylistItem struct {
 	Title     string `json:"title"`
 	Thumbnail string `json:"thumbnail,omitempty"`
 	Duration  int64  `json:"duration,omitempty"`
+	URL       string `json:"url,omitempty"` // رابط العنصر (لتحليل عيّنة من القائمة وتقدير الحجم)
 }
 
 type DirectFile struct {

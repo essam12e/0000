@@ -119,7 +119,11 @@ func parseInfo(url string, root map[string]any) (*MediaInfo, error) {
 			if title == "" {
 				title = fmt.Sprintf("عنصر %d", i+1)
 			}
-			info.Items = append(info.Items, PlaylistItem{Index: i + 1, Title: title, Thumbnail: thumbOf(e), Duration: int64(d)})
+			itemURL := firstNonEmpty(str(e, "url"), str(e, "webpage_url"))
+			if !strings.HasPrefix(itemURL, "http") {
+				itemURL = ""
+			}
+			info.Items = append(info.Items, PlaylistItem{Index: i + 1, Title: title, Thumbnail: thumbOf(e), Duration: int64(d), URL: itemURL})
 			for _, f := range objs(e["formats"]) {
 				if s := shortSide(f); s > maxSide {
 					maxSide = s

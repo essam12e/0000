@@ -120,6 +120,48 @@ const fmt = {
   files(n) { return n === 1 ? 'ملف واحد' : n === 2 ? 'ملفان' : n <= 10 ? n + ' ملفات' : n + ' ملفاً'; },
   kind: { video: 'فيديو', audio: 'صوت', image: 'صورة', other: 'ملف' },
 };
+// تقدير حجم تحميل قائمة تشغيل: التحليل السريع للقائمة لا يجلب صيغ كل فيديو، لذا:
+//   1) فوراً: مجموع مدد الفيديوهات المحددة × معدل نموذجي لكل جودة («تقديري»).
+//   2) ثم: تُحلَّل عيّنة (حتى 3 فيديوهات) من القائمة نفسها ويُستخدم معدلها الفعلي («تقريبي»).
+const est = {
+  typical: [[2160, 14000], [1440, 7000], [1080, 3200], [720, 1700], [480, 900], [360, 550], [240, 350]], // كيلوبت/ثانية
+  typicalRate(side) {
+    const s = side > 5000 ? 1080 : side; // «الأعلى المتاح» يُعامل كـ 1080p حتى تُعرف العيّنة
+    const m = est.typical.find(([h]) => s >= h * 0.93) || est.typical[est.typical.length - 1];
+    return m[1] * 125;
+  },
+  audioRate: 130 * 125,
+  // معدل فعلي (بايت/ثانية) لكل جودة من فيديوهات العيّنة: نأخذ من كل فيديو الخيار الذي سيُحمَّل فعلاً.
+  ratesFrom(samples, presets) {
+    const usable = samples.filter((x) => x.duration > 0), out = {};
+    for (const p of presets) {
+      let bytes = 0, secs = 0;
+      for (const x of usable) {
+        const pick = p.side > 5000 ? x.options[0] : (x.options.find((o) => o.side <= p.side * 1.07) || x.options[x.options.length - 1]);
+        if (pick && pick.size) { bytes += pick.size; secs += x.duration; }
+      }
+      if (secs) out[p.id] = bytes / secs;
+    }
+    let ab = 0, as = 0;
+    for (const x of usable) if (x.audioSize) { ab += x.audioSize; as += x.duration; }
+    if (as) out.audio = ab / as;
+    return out;
+  },
+  // مجموع مدد العناصر المحددة؛ مجهولة المدة تُحسب بمتوسط المعروفة. null إذا لم تُعرف أي مدة.
+  seconds(items, selected) {
+    const chosen = items.filter((i) => selected.has(i.index)), known = chosen.map((i) => i.duration).filter((d) => d > 0);
+    if (!known.length) return null;
+    const sum = known.reduce((a, b) => a + b, 0);
+    return sum + (sum / known.length) * (chosen.length - known.length);
+  },
+  // الحجم الإجمالي المقدَّر للعناصر المحددة بجودة معيّنة (أو للصوت).
+  total(info, H, option, audio) {
+    const secs = est.seconds(info.items, H.items);
+    if (secs === null || !H.items.size) return null;
+    const rate = audio ? (H.plRates.audio || est.audioRate) : option ? (H.plRates[option.id] || est.typicalRate(option.side)) : null;
+    return rate ? secs * rate : null;
+  },
+};
 const QUALITIES = [[0, 'الأعلى المتاح'], [2160, '4K'], [1440, '1440p'], [1080, '1080p'], [720, '720p'], [480, '480p'], [360, '360p'], [-1, 'صوت فقط']];
 const BROWSERS = [['', 'بدون'], ['chrome', 'Chrome'], ['edge', 'Edge'], ['firefox', 'Firefox'], ['brave', 'Brave'], ['opera', 'Opera']];
 
@@ -127,7 +169,7 @@ const BROWSERS = [['', 'بدون'], ['chrome', 'Chrome'], ['edge', 'Edge'], ['fi
 const S = {
   view: 'home', setup: { ready: false, stage: '', progress: -1 }, settings: {}, saveRoot: '', customSave: false,
   tasks: [], library: [], history: [], version: '', cacheBytes: 0,
-  home: { url: '', state: 'idle', error: null, info: null, audio: false, optId: null, items: new Set(), audioLang: '', sub: null, subEmbed: true, subItems: null, trim: null, clip: '' },
+  home: { url: '', state: 'idle', error: null, info: null, audio: false, optId: null, items: new Set(), audioLang: '', sub: null, subEmbed: true, subItems: null, trim: null, clip: '', plRates: {}, plSampling: false },
   lib: { tab: 'files', q: '', sort: 'new', sel: new Set(), saving: new Set() },
 };
 const activeCount = () => S.tasks.filter((t) => t.state === 'running' || t.state === 'queued').length;
@@ -289,13 +331,20 @@ function resultView(info) {
     } else if (audio) {
       add(right, h('div', { class: 'label' }, 'الصوت'), h('div', { class: 'q on', style: 'cursor:default' }, h('span', { class: 'radio' }),
         h('div', {}, h('div', { class: 'name' }, 'صوت فقط · ' + (S.settings.audioFormat || 'mp3').toUpperCase()), h('div', { class: 'det' }, 'أعلى جودة صوت متاحة. غيّر الصيغة من الإعدادات.')),
-        !playlist && info.audioSize > 0 && h('div', { class: 'size num' }, fmt.bytes(info.audioSize), h('small', {}, 'تقريبي'))));
+        (playlist ? est.total(info, H, null, true) : info.audioSize) > 0 && h('div', { class: 'size num' },
+          fmt.bytes(playlist ? est.total(info, H, null, true) : info.audioSize), h('small', {}, playlist && !H.plRates.audio ? 'تقديري' : 'تقريبي'))));
     } else {
-      add(right, h('div', { class: 'label' }, 'الجودة', h('span', { class: 'end' }, info.options.length + ' خيارات')),
+      add(right, h('div', { class: 'label' }, 'الجودة', h('span', { class: 'end' },
+        !playlist ? info.options.length + ' خيارات' : H.plSampling ? 'جاري تدقيق الحجم…' : `إجمالي المحدد (${H.items.size})`)),
         info.options.map((o, i) => h('button', { class: 'q' + (o.id === H.optId ? ' on' : ''), style: `animation-delay:${i * 45}ms`, onclick: () => { H.optId = o.id; render(); } },
           h('span', { class: 'radio' }),
           h('div', {}, h('div', { class: 'name num' }, o.label, o.badge && h('span', { class: 'badge' + (i === 0 ? ' goldb' : '') }, o.badge)), h('div', { class: 'det' }, o.detail)),
-          h('div', { class: 'size num' }, o.size ? fmt.bytes(o.size) : '—', o.size && o.approx ? h('small', {}, 'تقريبي') : null))));
+          playlist
+            // القوائم: الحجم الإجمالي للفيديوهات المحددة بهذه الجودة
+            ? h('div', { class: 'size num' }, est.total(info, H, o, false) ? fmt.bytes(est.total(info, H, o, false)) : '—',
+              est.total(info, H, o, false) ? h('small', {}, H.plRates[o.id] ? 'تقريبي' : 'تقديري') : null)
+            : h('div', { class: 'size num' }, o.size ? fmt.bytes(o.size) : '—', o.size && o.approx ? h('small', {}, 'تقريبي') : null))),
+        playlist && h('p', { class: 'hint' }, 'الحجم الظاهر هو مجموع الفيديوهات المحددة، محسوباً من مدتها ومن عيّنة من القائمة نفسها؛ قد يختلف الفعلي قليلاً.'));
     }
   }
   // شريط التحميل الثابت
@@ -307,6 +356,7 @@ function resultView(info) {
     const frac = trimmed && info.duration ? (H.trim[1] - H.trim[0]) / info.duration : 1;
     const size = audio ? info.audioSize : opt && opt.size;
     cap = [playlist ? `${H.items.size} من ${info.items.length}` : null, audio ? 'صوت ' + (S.settings.audioFormat || 'mp3').toUpperCase() : opt && opt.label,
+      playlist && est.total(info, H, opt, audio) ? fmt.bytes(est.total(info, H, opt, audio)) + ' تقريباً' : null,
       trimmed ? h('span', { dir: 'ltr' }, `${fmt.clock(H.trim[0])}–${fmt.clock(H.trim[1])}`) : null, !playlist && size ? fmt.bytes(size * frac) + (audio || trimmed || (opt && opt.approx) ? ' تقريباً' : '') : null,
       H.sub && !audio ? 'ترجمة ' + H.sub.name : null];
   }
@@ -391,25 +441,57 @@ async function analyze() {
   const H = S.home;
   if (!H.url.trim()) return;
   const seq = ++analyzeSeq;
+  stopSampling();
   Object.assign(H, { state: 'loading', clip: '', error: null, info: null });
   render();
   try {
     const info = await api('analyze', { url: H.url });
     if (seq !== analyzeSeq) return;
+    for (const k of ['options', 'items', 'direct', 'audioTracks', 'subtitles']) info[k] = info[k] || []; // حماية إضافية من القيم الفارغة
     const dq = S.settings.defaultQuality || 0;
     let opt = info.options[0] || null;
     if (dq > 0) opt = info.options.find((o) => o.side <= dq * 1.07) || info.options[info.options.length - 1] || null;
     const orig = info.audioTracks.find((t) => t.original);
     Object.assign(H, { state: 'ready', info, url: info.sourceUrl, optId: opt && opt.id, audio: dq === -1 && info.hasAudio && !info.direct.length && !info.viaGallery,
-      items: new Set(info.items.map((i) => i.index)), audioLang: orig ? orig.lang : '', sub: null, subEmbed: true, subItems: null, trim: null });
+      items: new Set(info.items.map((i) => i.index)), audioLang: orig ? orig.lang : '', sub: null, subEmbed: true, subItems: null, trim: null,
+      plRates: {}, plSampling: false });
+    if (info.isPlaylist && !info.viaGallery) samplePlaylist(info, seq);
   } catch (e) {
     if (seq !== analyzeSeq || (e && e.error === 'cancelled')) return;
     Object.assign(H, { state: 'error', error: e });
   }
   render();
 }
+// يحلّل عيّنة موزّعة على القائمة (الأول والأوسط والأخير) في الخلفية ليصير تقدير الحجم مبنياً على معدلها الفعلي.
+// فشل العيّنة لا يؤثر على شيء: يبقى التقدير النموذجي. تغيير الرابط يوقفها.
+let sampleAbort = null;
+async function samplePlaylist(info, seq) {
+  const pool = info.items.filter((i) => i.url);
+  const picks = pool.length <= 3 ? pool : [pool[0], pool[Math.floor(pool.length / 2)], pool[pool.length - 1]];
+  if (!picks.length) return;
+  const H = S.home, samples = [];
+  if (sampleAbort) sampleAbort.abort();
+  const abort = sampleAbort = new AbortController();
+  H.plSampling = true;
+  if (S.view === 'home') render();
+  for (const item of picks) {
+    try {
+      const r = await fetch('/api/sample', { method: 'POST', signal: abort.signal, headers: { 'X-Token': TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ url: item.url }) });
+      if (seq !== analyzeSeq) return;
+      if (!r.ok) continue;
+      const sample = await r.json();
+      if (sample.isPlaylist) continue;
+      samples.push(sample);
+      H.plRates = est.ratesFrom(samples, info.options);
+      if (S.view === 'home' && !$('#modal').firstChild) render();
+    } catch (e) { if (seq !== analyzeSeq) return; }
+  }
+  H.plSampling = false;
+  if (S.view === 'home' && !$('#modal').firstChild) render();
+}
+function stopSampling() { if (sampleAbort) { sampleAbort.abort(); sampleAbort = null; } S.home.plSampling = false; }
 function cancelAnalyze() { analyzeSeq++; api('analyze/cancel', {}).catch(() => {}); S.home.state = 'idle'; render(); }
-function resetHome() { analyzeSeq++; Object.assign(S.home, { url: '', state: 'idle', info: null, error: null, trim: null, sub: null }); render(); $('#url') && $('#url').focus(); }
+function resetHome() { analyzeSeq++; stopSampling(); Object.assign(S.home, { url: '', state: 'idle', info: null, error: null, trim: null, sub: null }); render(); $('#url') && $('#url').focus(); }
 async function pasteClipboard() {
   let text = '';
   try { text = (await api('clipboard')).url; } catch (e) { /* تجاهل */ }
@@ -443,7 +525,7 @@ function startDownload(force) {
     const items = playlist ? [...H.items].sort((a, b) => a - b) : undefined;
     const trim = !playlist && H.trim;
     const frac = trim && info.duration ? (trim[1] - trim[0]) / info.duration : 1;
-    const size = audio ? info.audioSize : opt && opt.size;
+    const size = playlist ? est.total(info, H, opt, audio) : audio ? info.audioSize : opt && opt.size;
     const sub = !audio ? H.sub : null;
     const label = [audio ? 'صوت ' + (S.settings.audioFormat || 'mp3').toUpperCase() : opt.label, trim ? `${fmt.clock(trim[0])}–${fmt.clock(trim[1])}` : null].filter(Boolean).join(' · ');
     const spec = { ...base, mode: audio ? 'audio' : 'video', selector: opt && opt.selector, label, audioFormat: S.settings.audioFormat, items,
