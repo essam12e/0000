@@ -166,7 +166,7 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
         val lastError = Contact.lastError
         var attachError by remember { mutableStateOf(lastError != null) }
         AppDialog(
-            "أرسل ملاحظة", onDismiss = { feedbackDialog = false }, confirmText = "إرسال عبر واتساب",
+            "ملاحظة عبر واتساب", onDismiss = { feedbackDialog = false }, confirmText = "إرسال",
             onConfirm = {
                 if (text.isNotBlank()) {
                     val message = buildString {
@@ -181,7 +181,7 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
         ) {
             Column {
                 com.downloader.app.ui.components.AppTextField(
-                    text, { text = it }, Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    text, { text = it }, Modifier.fillMaxWidth(),
                     placeholder = "اكتب ملاحظتك أو اقتراحك هنا…", singleLine = false,
                 )
                 if (lastError != null) {

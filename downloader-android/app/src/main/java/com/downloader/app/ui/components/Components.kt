@@ -357,16 +357,16 @@ fun AppTextField(
         modifier.heightIn(min = 48.dp).clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .border(1.dp, border, MaterialTheme.shapes.small).padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
     ) {
         if (leading != null) {
             Icon(leading, null, tint = AppTheme.extra.dim, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
         }
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = AppTheme.extra.dim, maxLines = 1)
+        Box(Modifier.weight(1f), contentAlignment = if (singleLine) Alignment.CenterStart else Alignment.TopStart) {
+            if (value.isEmpty()) Text(placeholder, style = MaterialTheme.typography.bodyMedium, color = AppTheme.extra.dim, maxLines = 1, modifier = Modifier.padding(vertical = if (singleLine) 0.dp else 10.dp))
             androidx.compose.foundation.text.BasicTextField(
-                value = value, onValueChange = onValueChange, singleLine = singleLine,
+                value = value, onValueChange = onValueChange, singleLine = singleLine, minLines = if (singleLine) 1 else 5,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     color = MaterialTheme.colorScheme.onSurface,
                     textDirection = if (ltr) androidx.compose.ui.text.style.TextDirection.Ltr else androidx.compose.ui.text.style.TextDirection.Content,
@@ -375,7 +375,7 @@ fun AppTextField(
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(AppTheme.extra.gold),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                     keyboardType = if (number) androidx.compose.ui.text.input.KeyboardType.Number else androidx.compose.ui.text.input.KeyboardType.Text,
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    imeAction = if (singleLine) androidx.compose.ui.text.input.ImeAction.Done else androidx.compose.ui.text.input.ImeAction.Default,
                 ),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { onDone?.invoke() }),
                 modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
