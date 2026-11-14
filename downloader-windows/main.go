@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const appVersion = "1.1"
+const appVersion = "1.2"
 
 func main() {
 	port := flag.Int("port", 0, "منفذ ثابت (للتطوير)")

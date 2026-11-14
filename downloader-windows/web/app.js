@@ -458,6 +458,7 @@ async function analyze() {
     if (info.isPlaylist && !info.viaGallery) samplePlaylist(info, seq);
   } catch (e) {
     if (seq !== analyzeSeq || (e && e.error === 'cancelled')) return;
+    noteError(e, H.url);
     Object.assign(H, { state: 'error', error: e });
   }
   render();
@@ -714,15 +715,63 @@ function settingsView() {
     h('div', { class: 'label' }, 'التخزين'),
     h('div', { class: 'group' }, row('مسح الكاش', `ملفات مؤقتة وتحميلات ملغاة: ${fmt.bytes(Math.max(S.cacheBytes, 1024))} — لا يمسّ ملفات «تحميلاتي»`,
       h('button', { class: 'btn', onclick: () => api('cache/clear', {}).then((r) => { S.cacheBytes = r.cacheBytes; toast('تم مسح الكاش'); render(); }).catch((e) => toast(e.detail || e.title)) }, 'مسح'))),
+    h('div', { class: 'label' }, 'تواصل وملاحظات'),
+    h('div', { class: 'group' },
+      row('أرسل ملاحظة أو اقتراحاً', 'اكتب تعليقك أو مشكلة واجهتك، ويصل للمطوّر مباشرة عبر واتساب',
+        h('button', { class: 'btn gold', id: 'fb-open', onclick: feedbackDialog }, 'كتابة ملاحظة')),
+      row('تواصل مع المطوّر', h('span', {}, 'واتساب: ', h('bdi', { dir: 'ltr' }, CONTACT.display)),
+        h('button', { class: 'btn', id: 'wa-open', onclick: () => openWhatsApp('') }, 'فتح واتساب'))),
     h('div', { class: 'label' }, 'حول'),
-    h('div', { class: 'group' }, row('داونلودر لويندوز', `الإصدار ${S.version} — بلا إعلانات، بلا تتبّع، وكل شيء يعمل على جهازك. يعتمد على yt-dlp و FFmpeg و gallery-dl مفتوحة المصدر. حمّل فقط ما تملك حق تحميله.`)));
+    h('div', { class: 'group' }, row('داونلودر لويندوز', `الإصدار ${S.version} · تطوير ${CONTACT.developer} — بلا إعلانات، بلا تتبّع، وكل شيء يعمل على جهازك. يعتمد على yt-dlp و FFmpeg و gallery-dl مفتوحة المصدر. حمّل فقط ما تملك حق تحميله.`)));
 }
+// ---------------------------------------------------------------- التواصل والملاحظات (واتساب مباشرة — بلا خادم)
+const CONTACT = { developer: 'بابلو', whatsapp: '966531098278', display: '+966 53 109 8278', lastError: '' };
+const WA_MAX_URL = 1900; // حدّ ويندوز لطول الرابط الذي يُفتح في المتصفح
+function waUrl(text) { return 'https://wa.me/' + CONTACT.whatsapp + (text ? '?text=' + encodeURIComponent(text) : ''); }
+function openWhatsApp(text) { return api('openurl', { url: waUrl(text) }); }
+function noteError(e, url) {
+  if (!e) return;
+  const parts = typeof e === 'string' ? [e] : [e.title, e.detail];
+  CONTACT.lastError = parts.concat(url).filter(Boolean).join('\n').slice(0, 400);
+}
+function feedbackDialog() {
+  const ta = h('textarea', { class: 'note', id: 'fb-text', rows: 6, placeholder: 'اكتب ملاحظتك أو اقتراحك هنا…' });
+  const attach = CONTACT.lastError && h('input', { type: 'checkbox', id: 'fb-attach', checked: true });
+  const send = async () => {
+    const body = ta.value.trim();
+    if (!body) { ta.focus(); return; }
+    const sig = `— داونلودر لويندوز ${S.version}` + (S.setup.version ? ` · yt-dlp ${S.setup.version}` : '');
+    const full = body + (attach && attach.checked ? '\n\nآخر خطأ ظهر:\n' + CONTACT.lastError : '') + '\n\n' + sig;
+    try {
+      if (waUrl(full).length <= WA_MAX_URL) { await openWhatsApp(full); toast('فُتحت محادثة واتساب والنص جاهز — اضغط «إرسال» هناك'); }
+      else {
+        // نص أطول من أن يُحمَل في الرابط: يُنسخ للحافظة وتُفتح المحادثة ليُلصق فيها.
+        let copied = false;
+        try { await navigator.clipboard.writeText(full); copied = true; } catch (_) { /* الحافظة غير متاحة */ }
+        if (!copied) { toast('الملاحظة طويلة جداً — اختصرها قليلاً ثم أعد المحاولة'); return; }
+        await openWhatsApp('');
+        toast('الملاحظة طويلة فنُسخت — ألصقها في محادثة واتساب (Ctrl+V) ثم أرسل');
+      }
+      closeModal();
+    } catch (e) { toast('تعذّر فتح واتساب: ' + ((e && (e.detail || e.title)) || '')); }
+  };
+  modal('أرسل ملاحظة', [
+    ta,
+    attach && h('label', { class: 'attach' }, attach, h('span', {}, 'أرفق آخر خطأ ظهر', h('small', {}, CONTACT.lastError.split('\n')[0].slice(0, 90)))),
+    h('p', { class: 'hint' }, 'تُفتح محادثة واتساب مع المطوّر والنص جاهز فيها؛ تراجعه ثم تضغط «إرسال» بنفسك. يُضاف تلقائياً رقم إصدار البرنامج فقط.'),
+  ], [
+    h('button', { class: 'btn gold', id: 'fb-send', onclick: send }, 'إرسال عبر واتساب'),
+    h('button', { class: 'btn', onclick: closeModal }, 'إلغاء'),
+  ]);
+  ta.focus();
+}
+
 function applySettings(view) { S.settings = view.settings; S.saveRoot = view.saveRoot; S.customSave = view.customSave; }
 
 // ---------------------------------------------------------------- التشغيل
 function onEvent(msg) {
   const { type, data } = msg;
-  if (type === 'tasks') { S.tasks = data || []; renderNav(); if (S.view === 'library' && S.lib.tab === 'files') renderTasks(); }
+  if (type === 'tasks') { S.tasks = data || []; const bad = S.tasks.find((t) => t.state === 'failed' && t.error); if (bad) noteError(bad.error, bad.spec && bad.spec.url); renderNav(); if (S.view === 'library' && S.lib.tab === 'files') renderTasks(); }
   else if (type === 'library') { S.library = data || []; if (S.view === 'library') { if (S.lib.tab === 'files') renderFiles(); refreshLibHead(); } }
   else if (type === 'history') { S.history = data || []; if (S.view === 'library') (S.lib.tab === 'history' ? render() : refreshLibHead()); }
   else if (type === 'settings') applySettings(data);

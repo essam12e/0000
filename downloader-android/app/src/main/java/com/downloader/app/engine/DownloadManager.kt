@@ -2,6 +2,7 @@ package com.downloader.app.engine
 
 import android.content.Context
 import com.downloader.app.data.AppError
+import com.downloader.app.data.Contact
 import com.downloader.app.data.DownloadMode
 import com.downloader.app.data.DownloadSpec
 import com.downloader.app.data.DownloadTask
@@ -234,6 +235,7 @@ object DownloadManager {
                     stoppedByUser -> mutate(id) { it.copy(state = TaskState.PAUSED, speed = null, etaSec = null, stage = null) }
                     else -> {
                         val err = t as? AppError ?: AppError(ErrorType.GENERIC, t.message)
+                        Contact.lastError = listOfNotNull(err.type.message(), err.detail, spec.url).joinToString("\n")
                         mutate(id) {
                             it.copy(
                                 state = TaskState.FAILED, speed = null, etaSec = null, stage = null,

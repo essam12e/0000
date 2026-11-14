@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.downloader.app.data.AppError
+import com.downloader.app.data.Contact
+import com.downloader.app.data.message
 import com.downloader.app.data.DownloadMode
 import com.downloader.app.data.DownloadSpec
 import com.downloader.app.data.ErrorType
@@ -191,6 +193,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AppError) {
+                Contact.lastError = listOfNotNull(e.type.message(), e.detail, url).joinToString("\n")
                 if (isActive) _ui.update { it.copy(state = HomeState.Failed(e.type, e.detail)) }
             } catch (e: Throwable) {
                 if (isActive) _ui.update { it.copy(state = HomeState.Failed(ErrorType.GENERIC, e.message)) }

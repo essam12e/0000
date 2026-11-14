@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.downloader.app.BuildConfig
 import com.downloader.app.R
+import com.downloader.app.data.Contact
 import com.downloader.app.data.Fmt
 import com.downloader.app.data.qualityChoices
 import com.downloader.app.ui.components.AppDialog
@@ -63,6 +64,7 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
     val cache by vm.cacheBytes.collectAsStateWithLifecycle()
     var qualityDialog by remember { mutableStateOf(false) }
     var aboutDialog by remember { mutableStateOf(false) }
+    var feedbackDialog by remember { mutableStateOf(false) }
     var logoutDialog by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     // اختيار مجلد عبر نظام أندرويد نفسه: يمنح التطبيق إذن الكتابة في ذلك المجلد فقط، بلا صلاحية تخزين.
@@ -139,10 +141,70 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
         }
 
         Spacer(Modifier.height(22.dp))
+        SectionLabel("تواصل وملاحظات")
+        Group {
+            SettingRow("أرسل ملاحظة أو اقتراحاً", "اكتب تعليقك أو مشكلة واجهتك، ويصل للمطوّر مباشرة عبر واتساب", onClick = { feedbackDialog = true }) {
+                Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, null, tint = AppTheme.extra.dim, modifier = Modifier.size(20.dp))
+            }
+            Divider()
+            SettingRow("تواصل مع المطوّر", "واتساب: ${Contact.WHATSAPP_DISPLAY}") {
+                Pill("واتساب") { if (!Contact.openWhatsApp(context, "")) vm.notify("تعذّر فتح واتساب على هذا الجهاز") }
+            }
+        }
+
+        Spacer(Modifier.height(22.dp))
         SectionLabel("حول")
         Group {
-            SettingRow("عن التطبيق", "داونلودر ${BuildConfig.VERSION_NAME}", onClick = { aboutDialog = true }) {
+            SettingRow("عن التطبيق", "داونلودر ${BuildConfig.VERSION_NAME}  ·  تطوير ${Contact.DEVELOPER}", onClick = { aboutDialog = true }) {
                 Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, null, tint = AppTheme.extra.dim, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+
+    if (feedbackDialog) {
+        var text by remember { mutableStateOf("") }
+        val lastError = Contact.lastError
+        var attachError by remember { mutableStateOf(lastError != null) }
+        AppDialog(
+            "أرسل ملاحظة", onDismiss = { feedbackDialog = false }, confirmText = "إرسال عبر واتساب",
+            onConfirm = {
+                if (text.isNotBlank()) {
+                    val message = buildString {
+                        append(text.trim())
+                        if (attachError && lastError != null) append("\n\nآخر خطأ ظهر:\n").append(lastError)
+                        append("\n\n").append(Contact.signature(version))
+                    }
+                    if (Contact.openWhatsApp(context, message)) feedbackDialog = false
+                    else vm.notify("تعذّر فتح واتساب على هذا الجهاز")
+                }
+            },
+        ) {
+            Column {
+                com.downloader.app.ui.components.AppTextField(
+                    text, { text = it }, Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    placeholder = "اكتب ملاحظتك أو اقتراحك هنا…", singleLine = false,
+                )
+                if (lastError != null) {
+                    Row(
+                        Modifier.padding(top = 10.dp).fillMaxWidth().clip(MaterialTheme.shapes.small).clickable { attachError = !attachError }.padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier.size(22.dp).clip(RoundedCornerShape(6.dp))
+                                .then(if (attachError) Modifier.background(AppTheme.extra.goldBrush) else Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))),
+                            contentAlignment = Alignment.Center,
+                        ) { if (attachError) Icon(Icons.Rounded.Check, null, tint = AppTheme.extra.onGold, modifier = Modifier.size(15.dp)) }
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("أرفق آخر خطأ ظهر", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                            Text(lastError.lineSequence().first().take(70), style = MaterialTheme.typography.bodySmall, color = AppTheme.extra.dim, maxLines = 1)
+                        }
+                    }
+                }
+                Text(
+                    "تُفتح محادثة واتساب مع المطوّر والنص جاهز فيها؛ تراجعه ثم تضغط «إرسال» بنفسك. يُضاف تلقائياً إصدار التطبيق ونوع الجهاز فقط.",
+                    style = MaterialTheme.typography.bodySmall, color = AppTheme.extra.dim, modifier = Modifier.padding(top = 10.dp),
+                )
             }
         }
     }
@@ -188,6 +250,7 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
                     "بلا إعلانات، بلا تتبّع، بلا تحليلات.",
                     "كل شيء يعمل على جهازك: لا خوادم وسيطة ولا واجهات خارجية.",
                     "يعتمد على yt-dlp و FFmpeg مفتوحَي المصدر، وخط «تجوّل».",
+                    "تطوير ${Contact.DEVELOPER}  ·  للتواصل والملاحظات عبر واتساب: ${Contact.WHATSAPP_DISPLAY}",
                     "حمّل فقط ما تملك حق تحميله، واحترم حقوق أصحاب المحتوى.",
                 ).forEach {
                     Row(Modifier.padding(vertical = 3.dp)) {
