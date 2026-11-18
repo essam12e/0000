@@ -64,11 +64,21 @@ data class HomeUi(
     val plSampling: Boolean = false,
     /** آخر تحميل سابق للمحتوى نفسه إن وُجد. */
     val duplicate: HistoryEntry? = null,
+    /** التنزيل بضغطة واحدة: التحليل الجاري سيتبعه تحميل تلقائي بالجودة الافتراضية. */
+    val quick: Boolean = false,
+    /** مهمة التنزيل السريع الجارية (لعرض تقدّمها في الرئيسية). */
+    val quickTaskId: String? = null,
+    /** الملف الذي اكتمل تنزيله للتو (لعرض شاشة النتيجة). */
+    val resultItemId: String? = null,
 )
 
 sealed interface HomeEvent {
     data class Enqueued(val count: Int) : HomeEvent
     data class ConfirmDuplicate(val previous: HistoryEntry) : HomeEvent
+    /** بدأ تنزيل سريع (تبقى الرئيسية ظاهرة). */
+    data object QuickStarted : HomeEvent
+    /** لا رابط في الحافظة، أو الرابط يحتاج اختيارات (قائمة، محتوى مكرر…): افتح شاشة الخيارات. */
+    data class OpenOptions(val reason: String?) : HomeEvent
 }
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
@@ -82,6 +92,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { settings.flow.collect { s -> _ui.update { it.copy(audioFormat = s.audioFormat) } } }
+        viewModelScope.launch {
+            DownloadManager.finished.collect { (taskId, items) ->
+                if (taskId == _ui.value.quickTaskId) {
+                    _ui.update { it.copy(quick = false, quickTaskId = null, resultItemId = items.firstOrNull()?.id, url = "", state = HomeState.Idle) }
+                }
+            }
+        }
     }
 
     fun onUrlChange(v: String) = _ui.update {
@@ -142,11 +159,60 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(clipboardUrl = null) }
     }
 
-    /** رابط وصل بالمشاركة من تطبيق آخر. */
+    /** رابط وصل بالمشاركة من تطبيق آخر: يُنزَّل مباشرة بضغطة واحدة. */
     fun onShared(text: String?) {
         val url = extractUrl(text) ?: return
-        _ui.update { it.copy(url = url, clipboardUrl = null) }
+        quickStart(url)
+    }
+
+    /** إعادة فتح رابط من السجلّ في شاشة الخيارات (بلا تنزيل تلقائي). */
+    fun openInOptions(text: String?) {
+        val url = extractUrl(text) ?: return
+        _ui.update { it.copy(url = url, clipboardUrl = null, quick = false) }
         analyze()
+    }
+
+    /** زر الرئيسية الكبير: يأخذ الرابط المنسوخ ويحلّله ثم ينزّله بالجودة الافتراضية. */
+    fun quickStart(explicitUrl: String? = null) {
+        if (_ui.value.quickTaskId != null || _ui.value.state is HomeState.Loading) return
+        val url = explicitUrl ?: extractUrl(clipboardText())
+        if (url == null) {
+            _events.tryEmit(HomeEvent.OpenOptions("لا يوجد رابط منسوخ — ألصق الرابط هنا"))
+            return
+        }
+        viewModelScope.launch { settings.setLastClipboardUrl(url) }
+        _ui.update { it.copy(url = url, clipboardUrl = null, quick = true, resultItemId = null) }
+        analyze()
+    }
+
+    /** إلغاء التنزيل السريع أياً كانت مرحلته. */
+    fun quickCancel() {
+        job?.cancel()
+        _ui.value.quickTaskId?.let { DownloadManager.cancel(it) }
+        _ui.update { it.copy(quick = false, quickTaskId = null, state = HomeState.Idle, url = "") }
+    }
+
+    /** إغلاق شاشة النتيجة أو رسالة الخطأ والعودة للوضع الأول. */
+    fun quickReset() {
+        _ui.update { it.copy(quick = false, quickTaskId = null, resultItemId = null, state = if (it.quick) HomeState.Idle else it.state, url = if (it.quick) "" else it.url) }
+    }
+
+    fun showResult(itemId: String) = _ui.update { it.copy(resultItemId = itemId) }
+
+    /** بعد نجاح التحليل في الوضع السريع: نزّل مباشرة، أو افتح الخيارات إن احتاج الرابط قراراً من المستخدم. */
+    private fun continueQuick(info: MediaInfo) {
+        val needsChoice = info.isPlaylist || info.directFiles.size > 1 || info.items.size > 1
+        when {
+            needsChoice -> {
+                _ui.update { it.copy(quick = false) }
+                _events.tryEmit(HomeEvent.OpenOptions(null))
+            }
+            _ui.value.duplicate != null -> {
+                _ui.update { it.copy(quick = false) }
+                _events.tryEmit(HomeEvent.OpenOptions("حمّلت هذا من قبل"))
+            }
+            else -> download(quick = true)
+        }
     }
 
     fun analyze() {
@@ -191,7 +257,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                         plRates = emptyMap(), plSampling = false,
                     )
                 }
-                if (info.isPlaylist && !info.viaGallery) samplePlaylist(info)
+                if (_ui.value.quick) continueQuick(info)
+                else if (info.isPlaylist && !info.viaGallery) samplePlaylist(info)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AppError) {
@@ -270,7 +337,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun setTrim(start: Long?, end: Long?) = _ui.update { it.copy(trimStart = start, trimEnd = end) }
 
     /** [force] = المستخدم أكّد إعادة تحميل محتوى سبق تحميله. */
-    fun download(force: Boolean = false) {
+    fun download(force: Boolean = false, quick: Boolean = false) {
+        val ids = mutableListOf<String>()
         val ui = _ui.value
         val info = (ui.state as? HomeState.Ready)?.info ?: return
         if (!force && ui.duplicate != null) {
@@ -281,7 +349,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         var label = "تحميل مباشر"
         if (info.isDirect) {
             info.directFiles.forEach { f ->
-                DownloadManager.enqueue(
+                ids += DownloadManager.enqueue(
                     DownloadSpec(
                         url = f.url, title = if (info.directFiles.size == 1) info.title else f.fileName,
                         thumbnail = info.thumbnail, mode = DownloadMode.DIRECT, qualityLabel = "تحميل مباشر",
@@ -292,7 +360,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             }
         } else if (info.viaGallery) {
             val items = ui.selectedItems.sorted().takeIf { it.isNotEmpty() } ?: return
-            DownloadManager.enqueue(
+            ids += DownloadManager.enqueue(
                 DownloadSpec(
                     url = info.sourceUrl, title = info.title, thumbnail = info.thumbnail,
                     mode = DownloadMode.GALLERY, qualityLabel = "الجودة الأصلية", playlistItems = items,
@@ -339,15 +407,21 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 // ترجمة لفيديوهات معيّنة من القائمة: مهمة للمترجَمة وأخرى للبقية.
                 val with = items.filter { it in ui.subItems }
                 val without = items - with.toSet()
-                if (with.isNotEmpty()) DownloadManager.enqueue(base.copy(playlistItems = with, qualityLabel = "$label  ·  مع ترجمة"))
-                if (without.isNotEmpty()) DownloadManager.enqueue(base.copy(playlistItems = without, subLang = null))
+                if (with.isNotEmpty()) ids += DownloadManager.enqueue(base.copy(playlistItems = with, qualityLabel = "$label  ·  مع ترجمة"))
+                if (without.isNotEmpty()) ids += DownloadManager.enqueue(base.copy(playlistItems = without, subLang = null))
             } else {
-                DownloadManager.enqueue(base)
+                ids += DownloadManager.enqueue(base)
             }
             count = items?.size ?: 1
         }
         History.record(info.sourceUrl, info.mediaKey, info.title, info.thumbnail, label, info.platform)
         _ui.update { it.copy(duplicate = History.find(info.sourceUrl, info.mediaKey)) }
-        _events.tryEmit(HomeEvent.Enqueued(count))
+        if (quick && ids.size == 1) {
+            _ui.update { it.copy(quickTaskId = ids.first()) }
+            _events.tryEmit(HomeEvent.QuickStarted)
+        } else {
+            _ui.update { it.copy(quick = false) }
+            _events.tryEmit(HomeEvent.Enqueued(count))
+        }
     }
 }

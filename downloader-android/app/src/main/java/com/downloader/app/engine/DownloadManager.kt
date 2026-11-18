@@ -46,6 +46,10 @@ object DownloadManager {
     private val _completed = MutableSharedFlow<Pair<String, Int>>(extraBufferCapacity = 16)
     val completed: SharedFlow<Pair<String, Int>> = _completed
 
+    /** يُبث عند اكتمال مهمة: (معرّف المهمة، الملفات التي أُضيفت للمكتبة). */
+    private val _finished = MutableSharedFlow<Pair<String, List<LibraryItem>>>(extraBufferCapacity = 16)
+    val finished: SharedFlow<Pair<String, List<LibraryItem>>> = _finished
+
     /** تنبيهات غير فاشلة تُعرض للمستخدم (مثل: اكتمل التحميل بلا ترجمة). */
     private val _notices = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val notices: SharedFlow<String> = _notices
@@ -204,7 +208,7 @@ object DownloadManager {
                     !leftoverCover && !leftoverSub
                 }
                 if (files.isEmpty()) throw AppError(ErrorType.GENERIC, "لم ينتج عن التحميل أي ملف")
-                Library.add(files.map { f ->
+                val added = files.map { f ->
                     val mime = Mime.ofExtension(f.extension)
                     val kind = Mime.kindOf(mime).let { k ->
                         if (k == MediaKind.VIDEO && spec.mode == DownloadMode.AUDIO) MediaKind.AUDIO else k
@@ -220,12 +224,14 @@ object DownloadManager {
                         thumbUrl = spec.thumbnail,
                         sourceUrl = spec.url,
                     )
-                })
+                }
+                Library.add(added)
                 _tasks.update { list -> list.filterNot { it.id == id } }
                 persist()
                 // تنظيف بقايا مؤقتة إن وُجدت.
                 dir.listFiles()?.filter { it !in files }?.forEach { it.deleteRecursively() }
                 _completed.tryEmit(spec.title to files.size)
+                _finished.tryEmit(id to added)
             } catch (t: Throwable) {
                 val stillThere = _tasks.value.any { it.id == id }
                 val stoppedByUser = t is YoutubeDL.CanceledException || t is InterruptedException ||

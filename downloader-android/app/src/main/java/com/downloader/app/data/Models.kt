@@ -129,6 +129,8 @@ data class LibraryItem(
     val thumbUrl: String? = null,
     val sourceUrl: String? = null,
     val addedAt: Long = System.currentTimeMillis(),
+    /** مقطع قُصّ داخل التطبيق من ملف آخر. */
+    val clip: Boolean = false,
 )
 
 enum class ErrorType { UNSUPPORTED, PRIVATE, NO_INTERNET, ENGINE, GENERIC }

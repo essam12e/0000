@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -55,6 +57,7 @@ data class ExtendedColors(
     val hairlineSoft: Color,
     val success: Color,
     val goldBrush: Brush,
+    val dark: Boolean = true,
 )
 
 private val Extended = ExtendedColors(
@@ -69,7 +72,47 @@ private val Extended = ExtendedColors(
     goldBrush = Brush.linearGradient(listOf(Palette.GoldBright, Palette.Gold, Palette.GoldDeep)),
 )
 
+/*
+ * المظهر الفاتح: عاجي دافئ هادئ، والذهبي أغمق قليلاً ليبقى مقروءاً على الخلفية الفاتحة.
+ */
+private val ExtendedLight = ExtendedColors(
+    gold = Color(0xFFA67C2E),
+    goldBright = Color(0xFF8A6420),
+    goldDeep = Color(0xFF8A6420),
+    onGold = Color(0xFF1B1305),
+    dim = Color(0xFF9A948A),
+    hairline = Color(0xFFE2DCCF),
+    hairlineSoft = Color(0xFFECE7DC),
+    success = Color(0xFF4E8A47),
+    goldBrush = Brush.linearGradient(listOf(Color(0xFFEBD49C), Color(0xFFD9B36A), Color(0xFFB98A3C))),
+    dark = false,
+)
+
 val LocalExtendedColors = staticCompositionLocalOf { Extended }
+
+private val LightColors = lightColorScheme(
+    primary = Color(0xFFA67C2E),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFF3E6C8),
+    onPrimaryContainer = Color(0xFF5E4410),
+    secondary = Color(0xFF6F6A60),
+    onSecondary = Color(0xFFFFFFFF),
+    background = Color(0xFFF5F2EB),
+    onBackground = Color(0xFF17150F),
+    surface = Color(0xFFFBF9F4),
+    onSurface = Color(0xFF17150F),
+    surfaceVariant = Color(0xFFEAE5DA),
+    onSurfaceVariant = Color(0xFF6F6A60),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFFBF9F4),
+    surfaceContainer = Color(0xFFFFFFFF),
+    surfaceContainerHigh = Color(0xFFF0ECE3),
+    surfaceContainerHighest = Color(0xFFE8E3D8),
+    outline = Color(0xFFE2DCCF),
+    outlineVariant = Color(0xFFECE7DC),
+    error = Color(0xFFC0463A),
+    onError = Color(0xFFFFFFFF),
+)
 
 private val Colors = darkColorScheme(
     primary = Palette.Gold,
@@ -138,13 +181,22 @@ object AppTheme {
         @Composable get() = LocalExtendedColors.current
 }
 
+/** [mode]: 0 = تلقائي (يتبع الجهاز)، 1 = داكن، 2 = فاتح. */
 @Composable
-fun DownloaderTheme(content: @Composable () -> Unit) {
-    // الواجهة عربية بالكامل: نفرض RTL مهما كانت لغة الجهاز، والمظهر داكن دائماً (هوية ثابتة).
+fun isDarkMode(mode: Int): Boolean = when (mode) {
+    1 -> true
+    2 -> false
+    else -> isSystemInDarkTheme()
+}
+
+@Composable
+fun DownloaderTheme(mode: Int = 1, content: @Composable () -> Unit) {
+    val dark = isDarkMode(mode)
+    // الواجهة عربية بالكامل: نفرض RTL مهما كانت لغة الجهاز.
     CompositionLocalProvider(
-        LocalExtendedColors provides Extended,
+        LocalExtendedColors provides if (dark) Extended else ExtendedLight,
         LocalLayoutDirection provides LayoutDirection.Rtl,
     ) {
-        MaterialTheme(colorScheme = Colors, typography = Type, shapes = AppShapes, content = content)
+        MaterialTheme(colorScheme = if (dark) Colors else LightColors, typography = Type, shapes = AppShapes, content = content)
     }
 }

@@ -80,6 +80,14 @@ fun SettingsScreen(vm: SettingsViewModel, bottomInset: Dp, onOpenLogin: () -> Un
         Text("الإعدادات", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
         Spacer(Modifier.height(20.dp))
 
+        SectionLabel("المظهر")
+        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+            ThemeTile("تلقائي", 0, s.themeMode == 0, Modifier.weight(1f)) { vm.setThemeMode(0) }
+            ThemeTile("داكن", 1, s.themeMode == 1, Modifier.weight(1f)) { vm.setThemeMode(1) }
+            ThemeTile("فاتح", 2, s.themeMode == 2, Modifier.weight(1f)) { vm.setThemeMode(2) }
+        }
+
+        Spacer(Modifier.height(22.dp))
         SectionLabel("التحميل")
         Group {
             SettingRow("الجودة الافتراضية", "تُحدَّد تلقائياً بعد تحليل الرابط", onClick = { qualityDialog = true }) {
@@ -307,6 +315,46 @@ private fun Pill(text: String, danger: Boolean = false, loading: Boolean = false
     ) {
         if (loading) CircularProgressIndicator(Modifier.size(14.dp), color = AppTheme.extra.gold, strokeWidth = 2.dp)
         Text(text, style = MaterialTheme.typography.labelMedium, color = color)
+    }
+}
+
+/** بطاقة اختيار المظهر مع معاينة مصغّرة: 0 = تلقائي (نصف داكن ونصف فاتح)، 1 = داكن، 2 = فاتح. */
+@Composable
+private fun ThemeTile(label: String, mode: Int, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val gold = AppTheme.extra.gold
+    val darkBg = Color(0xFF0A0A0B)
+    val lightBg = Color(0xFFF5F2EB)
+    Column(
+        modifier.clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .border(if (selected) 1.5.dp else 1.dp, if (selected) gold.copy(alpha = 0.85f) else MaterialTheme.colorScheme.outline, MaterialTheme.shapes.large)
+            .clickable(onClick = onClick).padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(12.dp))) {
+            when (mode) {
+                1 -> drawRect(darkBg)
+                2 -> drawRect(lightBg)
+                else -> {
+                    drawRect(lightBg)
+                    drawRect(darkBg, size = androidx.compose.ui.geometry.Size(size.width / 2, size.height))
+                }
+            }
+            drawCircle(Color(0xFF1B1B1E), radius = size.height * 0.24f, center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height * 0.42f))
+            drawCircle(gold, radius = size.height * 0.24f, center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height * 0.42f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.2.dp.toPx()))
+            val barColor = if (mode == 2) Color(0x33000000) else Color(0x40FFFFFF)
+            drawRoundRect(barColor, topLeft = androidx.compose.ui.geometry.Offset(size.width * 0.3f, size.height * 0.8f), size = androidx.compose.ui.geometry.Size(size.width * 0.4f, size.height * 0.07f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f))
+        }
+        Spacer(Modifier.height(9.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(16.dp).clip(CircleShape)
+                    .then(if (selected) Modifier.background(gold) else Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)),
+                contentAlignment = Alignment.Center,
+            ) { if (selected) Icon(Icons.Rounded.Check, null, tint = AppTheme.extra.onGold, modifier = Modifier.size(11.dp)) }
+            Spacer(Modifier.width(7.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

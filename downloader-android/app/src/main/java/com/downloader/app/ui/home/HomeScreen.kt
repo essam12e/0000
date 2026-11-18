@@ -123,7 +123,7 @@ import com.downloader.app.ui.theme.NumberStyle
 import kotlinx.coroutines.delay
 
 @Composable
-fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modifier: Modifier = Modifier) {
+fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modifier: Modifier = Modifier, onClose: (() -> Unit)? = null) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val focus = LocalFocusManager.current
     val ready = ui.state as? HomeState.Ready
@@ -134,7 +134,7 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
             Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = bottomInset + if (ctaVisible) 96.dp else 16.dp),
         ) {
-            item("header") { Header() }
+            item("header") { Header(onClose) }
             item("hero") {
                 AnimatedVisibility(
                     ui.state is HomeState.Idle,
@@ -315,11 +315,12 @@ fun HomeScreen(vm: HomeViewModel, bottomInset: Dp, onOpenLogin: () -> Unit, modi
 }
 
 @Composable
-private fun Header() {
+private fun Header(onClose: (() -> Unit)?) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 18.dp)) {
         BrandMark(26.dp)
         Spacer(Modifier.width(10.dp))
-        Text("داونلودر", style = MaterialTheme.typography.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold), color = MaterialTheme.colorScheme.onSurface)
+        Text(if (onClose != null) "خيارات التحميل" else "داونلودر", style = MaterialTheme.typography.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold), color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+        if (onClose != null) com.downloader.app.ui.components.RoundIconButton(androidx.compose.material.icons.Icons.Rounded.Close, "إغلاق", onClose)
     }
 }
 

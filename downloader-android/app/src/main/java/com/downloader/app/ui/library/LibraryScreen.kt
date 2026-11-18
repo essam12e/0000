@@ -143,6 +143,7 @@ fun LibraryScreen(
     val selected by vm.selected.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
+    val filter by vm.filter.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var showHistory by rememberSaveable { mutableStateOf(false) }
@@ -174,7 +175,7 @@ fun LibraryScreen(
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 64.dp)) {
                     Column(Modifier.weight(1f)) {
-                        Text("تحميلاتي", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+                        Text("المكتبة", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             if (all.isEmpty()) "ملفاتك تبقى هنا حتى تحفظها في الجهاز"
                             else Fmt.iso(Fmt.files(all.size)) + "  ·  " + Fmt.iso(Fmt.bytes(all.sumOf { it.size })),
@@ -205,9 +206,11 @@ fun LibraryScreen(
                     Box(
                         Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(bg).clickable(onClick = click),
                         contentAlignment = Alignment.Center,
-                    ) { Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant) }
+                    ) { Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, color = if (on) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
-                Seg("الملفات", !showHistory) { showHistory = false }
+                Seg("الكل", !showHistory && filter == 0) { showHistory = false; vm.setFilter(0) }
+                Seg("تنزيلات", !showHistory && filter == 1) { showHistory = false; vm.setFilter(1) }
+                Seg("مقاطع", !showHistory && filter == 2) { showHistory = false; vm.setFilter(2) }
                 Seg("السجلّ" + if (history.isNotEmpty()) "  ${history.size}" else "", showHistory) { showHistory = true }
             }
         }

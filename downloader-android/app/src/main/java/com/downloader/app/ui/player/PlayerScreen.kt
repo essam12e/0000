@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.SaveAlt
+import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +63,7 @@ fun PlayerScreen(
     onSave: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
+    onTrim: (() -> Unit)? = null,
 ) {
     BackHandler(onBack = onClose)
     val context = LocalContext.current
@@ -127,6 +129,7 @@ fun PlayerScreen(
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             QuietButton("حفظ في الجهاز", onSave, Modifier.weight(1f), icon = Icons.Rounded.SaveAlt, loading = saving)
+            if (onTrim != null && item.kind == MediaKind.VIDEO) RoundIconButton(Icons.Rounded.ContentCut, "قصّ مقطع", onTrim, Modifier.size(52.dp))
             RoundIconButton(Icons.Rounded.Share, "مشاركة", onShare, Modifier.size(52.dp))
             RoundIconButton(Icons.Rounded.DeleteOutline, "حذف", onDelete, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.error)
         }

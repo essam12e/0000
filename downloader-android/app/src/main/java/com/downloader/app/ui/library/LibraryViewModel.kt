@@ -36,8 +36,14 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     private val _sort = MutableStateFlow(SortMode.NEWEST)
     val sort: StateFlow<SortMode> = _sort
 
-    /** الملفات بعد البحث والفرز. */
-    val items: StateFlow<List<LibraryItem>> = combine(Library.items, _query, _sort) { list, q, sort ->
+    /** تبويب المكتبة: 0 = الكل، 1 = التنزيلات، 2 = المقاطع المقصوصة. */
+    private val _filter = MutableStateFlow(0)
+    val filter: StateFlow<Int> = _filter
+    fun setFilter(v: Int) { _filter.value = v }
+
+    /** الملفات بعد التبويب والبحث والفرز. */
+    val items: StateFlow<List<LibraryItem>> = combine(Library.items, _query, _sort, _filter) { all, q, sort, tab ->
+        val list = when (tab) { 1 -> all.filter { !it.clip }; 2 -> all.filter { it.clip }; else -> all }
         val filtered = if (q.isBlank()) list else list.filter { it.title.contains(q.trim(), ignoreCase = true) }
         when (sort) {
             SortMode.NEWEST -> filtered.sortedByDescending { it.addedAt }

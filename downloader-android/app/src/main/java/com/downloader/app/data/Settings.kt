@@ -20,6 +20,8 @@ data class AppSettings(
     val lastClipboardUrl: String = "",
     /** مجلد حفظ مخصص اختاره المستخدم (رابط شجرة SAF)، أو فارغ للمكان الافتراضي. */
     val saveTreeUri: String = "",
+    /** المظهر: 0 = تلقائي، 1 = داكن، 2 = فاتح. */
+    val themeMode: Int = 1,
 )
 
 class SettingsStore(private val context: Context) {
@@ -30,6 +32,7 @@ class SettingsStore(private val context: Context) {
         val engineUpdate = longPreferencesKey("last_engine_update")
         val clip = stringPreferencesKey("last_clipboard_url")
         val saveTree = stringPreferencesKey("save_tree_uri")
+        val theme = intPreferencesKey("theme_mode")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map { p ->
@@ -40,6 +43,7 @@ class SettingsStore(private val context: Context) {
             lastEngineUpdate = p[K.engineUpdate] ?: 0,
             lastClipboardUrl = p[K.clip] ?: "",
             saveTreeUri = p[K.saveTree] ?: "",
+            themeMode = (p[K.theme] ?: 1).coerceIn(0, 2),
         )
     }
 
@@ -48,6 +52,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setMaxParallel(v: Int) = context.store.edit { it[K.parallel] = v.coerceIn(1, 5) }
     suspend fun setEngineUpdated(t: Long) = context.store.edit { it[K.engineUpdate] = t }
     suspend fun setSaveTreeUri(v: String) = context.store.edit { it[K.saveTree] = v }
+    suspend fun setThemeMode(v: Int) = context.store.edit { it[K.theme] = v.coerceIn(0, 2) }
     suspend fun setLastClipboardUrl(v: String) = context.store.edit { it[K.clip] = v }
 }
 

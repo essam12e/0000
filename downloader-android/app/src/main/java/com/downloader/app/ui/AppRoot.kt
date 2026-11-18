@@ -44,7 +44,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -76,6 +76,8 @@ import com.downloader.app.ui.components.AppDialog
 import com.downloader.app.ui.home.HomeEvent
 import com.downloader.app.ui.home.HomeScreen
 import com.downloader.app.ui.home.HomeViewModel
+import com.downloader.app.ui.home.QuickHome
+import com.downloader.app.ui.trim.TrimScreen
 import com.downloader.app.ui.library.LibraryScreen
 import com.downloader.app.ui.library.LibraryViewModel
 import com.downloader.app.ui.library.shareItem
@@ -90,7 +92,7 @@ import kotlinx.coroutines.flow.merge
 
 enum class Tab(val label: String, val icon: ImageVector) {
     HOME("الرئيسية", Icons.Rounded.Home),
-    LIBRARY("تحميلاتي", Icons.Rounded.VideoLibrary),
+    LIBRARY("المكتبة", Icons.Rounded.Layers),
     SETTINGS("الإعدادات", Icons.Rounded.Settings),
 }
 
@@ -106,12 +108,15 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
     var playingId by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var deleteFromPlayer by remember { mutableStateOf<LibraryItem?>(null) }
+    var showOptions by remember { mutableStateOf(false) }
+    var trimmingId by remember { mutableStateOf<String?>(null) }
 
     val items by libraryVm.allItems.collectAsStateWithLifecycle()
     var duplicate by remember { mutableStateOf<com.downloader.app.data.HistoryEntry?>(null) }
     val tasks by libraryVm.tasks.collectAsStateWithLifecycle()
     val saving by libraryVm.saving.collectAsStateWithLifecycle()
     val playing = items.firstOrNull { it.id == playingId }
+    val trimming = items.firstOrNull { it.id == trimmingId }
 
     // صلاحية الإشعارات (أندرويد 13+) تُطلب عند أول تحميل فقط.
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -135,7 +140,20 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
     LaunchedEffect(Unit) {
         homeVm.events.collect { e ->
             if (e is HomeEvent.ConfirmDuplicate) duplicate = e.previous
+            if (e is HomeEvent.OpenOptions) {
+                tab = Tab.HOME
+                showOptions = true
+                e.reason?.let { message = it }
+            }
+            if (e is HomeEvent.QuickStarted) {
+                tab = Tab.HOME
+                showOptions = false
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
             if (e is HomeEvent.Enqueued) {
+                showOptions = false
                 tab = Tab.LIBRARY
                 message = if (e.count > 1) "بدأ تحميل ${com.downloader.app.data.Fmt.elements(e.count)}" else "بدأ التحميل"
                 if (Build.VERSION.SDK_INT >= 33 &&
@@ -154,7 +172,8 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
         }
     }
 
-    BackHandler(enabled = tab != Tab.HOME && !showLogin && playing == null) { tab = Tab.HOME }
+    BackHandler(enabled = tab != Tab.HOME && !showLogin && playing == null && trimming == null) { tab = Tab.HOME }
+    BackHandler(enabled = showOptions && tab == Tab.HOME && !showLogin && playing == null && trimming == null) { showOptions = false }
 
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomInset = BarHeight + 20.dp + navInset
@@ -164,7 +183,7 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
             // وهج ذهبي خافت أعلى الشاشة — يكسر السواد المسطّح دون أن ينافس المحتوى.
             drawRect(
                 Brush.radialGradient(
-                    listOf(Color(0x1FD9B36A), Color.Transparent),
+                    listOf(Color(0x1AD9B36A), Color.Transparent),
                     center = Offset(size.width * 0.85f, -size.height * 0.05f), radius = size.width * 0.9f,
                 )
             )
@@ -176,13 +195,22 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
             label = "tab",
         ) { current ->
             when (current) {
-                Tab.HOME -> HomeScreen(homeVm, bottomInset, onOpenLogin = { showLogin = true })
+                Tab.HOME -> QuickHome(
+                    homeVm, bottomInset, saving = saving,
+                    onOpenOptions = { showOptions = true },
+                    onOpenLogin = { showLogin = true },
+                    onPlay = { playingId = it.id },
+                    onShare = { shareItem(context, it) },
+                    onSave = { item -> withStorage { libraryVm.saveToGallery(item) { ok -> if (ok) homeVm.quickReset() } } },
+                    onTrim = { trimmingId = it.id },
+                    onOpenLibrary = { tab = Tab.LIBRARY },
+                )
                 Tab.LIBRARY -> LibraryScreen(
                     libraryVm, bottomInset,
                     onOpen = { playingId = it.id },
                     onSave = { item -> withStorage { libraryVm.saveToGallery(item) } },
                     onSaveMany = { list -> withStorage { libraryVm.saveMany(list) } },
-                    onReopenUrl = { url -> tab = Tab.HOME; homeVm.onShared(url) },
+                    onReopenUrl = { url -> tab = Tab.HOME; showOptions = true; homeVm.openInOptions(url) },
                 )
                 Tab.SETTINGS -> SettingsScreen(settingsVm, bottomInset, onOpenLogin = { showLogin = true })
             }
@@ -194,17 +222,39 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
             modifier = Modifier.align(Alignment.BottomCenter),
         )
 
+        // شاشة الخيارات الكاملة (الجودات، الترجمة، القوائم…): تُفتح من زر الخيارات أو عندما يحتاج الرابط اختياراً.
+        AnimatedVisibility(showOptions && tab == Tab.HOME, enter = fadeIn() + slideInVertically { it / 10 }, exit = fadeOut()) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                HomeScreen(homeVm, bottomInset, onOpenLogin = { showLogin = true }, onClose = { showOptions = false })
+            }
+        }
+
         AnimatedVisibility(playing != null, enter = fadeIn() + slideInVertically { it / 8 }, exit = fadeOut()) {
             // نحتفظ بآخر عنصر أثناء حركة الخروج.
             var last by remember { mutableStateOf(playing) }
             if (playing != null) last = playing
             last?.let { item ->
+                // المشغّل داكن دائماً (خلفية سوداء) مهما كان مظهر التطبيق.
+                com.downloader.app.ui.theme.DownloaderTheme(1) {
                 PlayerScreen(
                     item, saving = item.id in saving,
                     onClose = { playingId = null },
                     onSave = { withStorage { libraryVm.saveToGallery(item) { ok -> if (ok) playingId = null } } },
                     onShare = { shareItem(context, item) },
                     onDelete = { deleteFromPlayer = item },
+                    onTrim = { playingId = null; trimmingId = item.id },
+                )
+                }
+            }
+        }
+
+        AnimatedVisibility(trimming != null, enter = fadeIn() + slideInVertically { it / 8 }, exit = fadeOut()) {
+            var last by remember { mutableStateOf(trimming) }
+            if (trimming != null) last = trimming
+            last?.let { item ->
+                TrimScreen(
+                    item, onClose = { trimmingId = null },
+                    onDone = { clip -> trimmingId = null; showOptions = false; tab = Tab.HOME; homeVm.showResult(clip.id) },
                 )
             }
         }
@@ -277,10 +327,10 @@ private fun BottomBar(current: Tab, onSelect: (Tab) -> Unit, activeCount: Int, m
             BoxWithConstraints(Modifier.fillMaxWidth().height(BarHeight)) {
                 val slot = maxWidth / Tab.entries.size
                 val indicatorX by animateDpAsState(
-                    slot * current.ordinal + (slot - 28.dp) / 2,
+                    slot * current.ordinal + 7.dp,
                     spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow), label = "indicator",
                 )
-                Box(Modifier.offset(x = indicatorX).width(28.dp).height(3.dp).background(extra.goldBrush, RoundedCornerShape(bottomStart = 3.dp, bottomEnd = 3.dp)))
+                Box(Modifier.offset(x = indicatorX, y = 7.dp).width(slot - 14.dp).height(BarHeight - 14.dp).background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(24.dp)))
                 Row(Modifier.fillMaxSize()) {
                     Tab.entries.forEach { t ->
                         val selected = t == current

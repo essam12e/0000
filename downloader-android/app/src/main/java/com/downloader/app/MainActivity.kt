@@ -8,7 +8,10 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.first
 import com.downloader.app.ui.AppRoot
 import com.downloader.app.ui.Tab
 import com.downloader.app.ui.home.HomeViewModel
@@ -25,8 +28,20 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) handleIntent(intent)
+        // المظهر المحفوظ يُقرأ قبل أول رسم حتى لا تظهر ومضة بمظهر آخر.
+        val store = com.downloader.app.data.SettingsStore(applicationContext)
+        val initialMode = runCatching { kotlinx.coroutines.runBlocking { store.flow.first().themeMode } }.getOrDefault(1)
         setContent {
-            DownloaderTheme { AppRoot(tab, homeVm) }
+            val settings by store.flow.collectAsStateWithLifecycle(com.downloader.app.data.AppSettings(themeMode = initialMode))
+            val dark = com.downloader.app.ui.theme.isDarkMode(settings.themeMode)
+            // أيقونات شريط الحالة والتنقل تتبع المظهر (فاتحة على الداكن والعكس).
+            androidx.compose.runtime.SideEffect {
+                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
+            DownloaderTheme(settings.themeMode) { AppRoot(tab, homeVm) }
         }
     }
 

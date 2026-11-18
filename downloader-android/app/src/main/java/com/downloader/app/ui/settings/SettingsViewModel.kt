@@ -53,6 +53,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setQuality(v: Int) = viewModelScope.launch { store.setDefaultQuality(v) }
     fun setAudioFormat(v: String) = viewModelScope.launch { store.setAudioFormat(v) }
     fun setParallel(v: Int) = viewModelScope.launch { store.setMaxParallel(v) }
+    fun setThemeMode(v: Int) = viewModelScope.launch { store.setThemeMode(v) }
 
     /** المستخدم اختار مجلداً: نثبّت الإذن ليبقى بعد إعادة التشغيل ثم نحفظه. */
     fun setSaveFolder(uri: android.net.Uri) {
