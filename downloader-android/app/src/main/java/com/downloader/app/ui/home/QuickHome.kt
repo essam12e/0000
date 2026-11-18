@@ -19,6 +19,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -56,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -144,10 +146,11 @@ fun QuickHome(
             val failed = (ui.state as? HomeState.Failed)?.takeIf { ui.quick }
             val analyzing = ui.quick && ui.state is HomeState.Loading
             val progress: Float? = when {
-                task != null && task.state == TaskState.RUNNING -> task.progress
+                // قبل وصول أول نسبة (مرحلة التحضير) تدور الحلقة بدل أن تقف على صفر.
+                task != null && task.state == TaskState.RUNNING -> if (task.progress <= 0f) -1f else task.progress
                 task != null && task.state == TaskState.QUEUED -> -1f
                 task != null -> task.progress.coerceAtLeast(0f)
-                analyzing || (ui.quick && ui.quickTaskId == null && failed == null && ui.state is HomeState.Ready) -> -1f
+                analyzing || (ui.quick && !ui.quickChoice && ui.quickTaskId == null && failed == null && ui.state is HomeState.Ready) -> -1f
                 else -> null
             }
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -169,7 +172,7 @@ fun QuickHome(
                 Spacer(Modifier.height(44.dp))
                 Orb(
                     progress = progress, paused = task != null && task.state != TaskState.RUNNING && task.state != TaskState.QUEUED,
-                    enabled = progress == null && failed == null, onClick = { vm.quickStart() },
+                    enabled = progress == null && failed == null && !ui.quickChoice, onClick = { vm.quickStart() },
                 )
                 Spacer(Modifier.height(34.dp))
                 val phase = when {
@@ -178,6 +181,7 @@ fun QuickHome(
                     task != null && task.state == TaskState.PAUSED -> "paused"
                     task != null -> "downloading"
                     progress != null -> "analyzing"
+                    ui.quickChoice -> "choice"
                     else -> "idle"
                 }
                 AnimatedContent(
@@ -187,6 +191,7 @@ fun QuickHome(
                     Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         when (p) {
                             "idle" -> Idle(ui.clipboardUrl)
+                            "choice" -> Caption("اختر الجودة", "اضغط على الجودة التي تريدها ليبدأ التنزيل")
                             "analyzing" -> {
                                 Caption("جارٍ التحليل…", "نقرأ الرابط ونختار أفضل جودة")
                                 Spacer(Modifier.height(22.dp))
@@ -223,8 +228,116 @@ fun QuickHome(
                 }
                 Spacer(Modifier.height(24.dp))
             }
+            val choiceInfo = (ui.state as? HomeState.Ready)?.info?.takeIf { ui.quickChoice }
+            androidx.compose.animation.AnimatedVisibility(choiceInfo != null, enter = fadeIn(tween(200)), exit = fadeOut(tween(160))) {
+                Box(Modifier.fillMaxSize().background(Color(0x99000000)).clickable(remember { MutableInteractionSource() }, indication = null) { vm.quickCancel() })
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                choiceInfo != null, modifier = Modifier.align(Alignment.BottomCenter),
+                enter = slideInVertically(spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(),
+                exit = androidx.compose.animation.slideOutVertically(tween(200)) { it } + fadeOut(tween(160)),
+            ) {
+                var last by remember { androidx.compose.runtime.mutableStateOf(choiceInfo) }
+                if (choiceInfo != null) last = choiceInfo
+                last?.let { info ->
+                    androidx.activity.compose.BackHandler(enabled = choiceInfo != null) { vm.quickCancel() }
+                    QualityPopup(
+                        info, ui, bottomInset,
+                        // اختيار الجودة يبدأ التنزيل مباشرة.
+                        onSelect = { id -> vm.selectOption(id); vm.quickConfirm() }, onAudio = { vm.setAudioMode(true); vm.quickConfirm() },
+                        onMore = vm::quickToOptions, onClose = vm::quickCancel,
+                    )
+                }
+            }
             }
         }
+    }
+}
+
+/** النافذة المنبثقة بعد تحليل الرابط: الجودات المتاحة مع أحجامها و«صوت فقط». الضغط على أي خيار يبدأ التنزيل. */
+@Composable
+private fun QualityPopup(
+    info: com.downloader.app.data.MediaInfo, ui: HomeUi, bottomInset: Dp,
+    onSelect: (String) -> Unit, onAudio: () -> Unit, onMore: () -> Unit, onClose: () -> Unit,
+) {
+    val selected = info.videoOptions.firstOrNull { it.id == ui.selectedOptionId } ?: info.videoOptions.firstOrNull()
+    val audio = ui.audioMode
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = bottomInset + 6.dp)
+            .clickable(remember { MutableInteractionSource() }, indication = null) {},
+        shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), shadowElevation = 18.dp,
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Thumb(info.thumbnail, Modifier.size(width = 76.dp, height = 52.dp), fallback = kindIcon(MediaKind.VIDEO))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(info.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(info.platform, Fmt.duration(info.durationSec)).joinToString("  ·  ") { Fmt.iso(it) },
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                RoundIconButton(Icons.Rounded.Close, "إغلاق", onClose, Modifier.size(38.dp))
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("اختر الجودة — يبدأ التنزيل فوراً", style = MaterialTheme.typography.labelMedium, color = AppTheme.extra.dim)
+            Spacer(Modifier.height(8.dp))
+            Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                info.videoOptions.forEach { o ->
+                    ChoiceRow(
+                        title = o.label, badge = o.badge, note = o.detail,
+                        size = if (o.sizeBytes != null) Fmt.bytes(o.sizeBytes) else null,
+                        selected = false, onClick = { onSelect(o.id) },
+                    )
+                }
+                if (info.hasAudio) {
+                    ChoiceRow(
+                        title = "صوت فقط", badge = ui.audioFormat.uppercase(), note = "بدون فيديو",
+                        size = info.audioSizeBytes?.let { Fmt.bytes(it) }, selected = false, onClick = onAudio,
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "خيارات أكثر: ترجمة، قصّ، لغة الصوت", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp).clip(CircleShape).clickable(onClick = onMore).padding(vertical = 10.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChoiceRow(title: String, badge: String?, note: String, size: String?, selected: Boolean, onClick: () -> Unit) {
+    val gold = AppTheme.extra.gold
+    Row(
+        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+            .background(if (selected) gold.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(Modifier.border(if (selected) 1.5.dp else 1.dp, if (selected) gold.copy(alpha = 0.85f) else MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium))
+            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(30.dp).background(gold.copy(alpha = 0.14f), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.ArrowDownward, null, tint = gold, modifier = Modifier.size(17.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(Fmt.iso(title), style = MaterialTheme.typography.labelLarge.merge(NumberStyle), color = MaterialTheme.colorScheme.onSurface)
+                if (!badge.isNullOrBlank()) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        badge, style = MaterialTheme.typography.labelSmall, color = gold,
+                        modifier = Modifier.border(1.dp, gold.copy(alpha = 0.5f), MaterialTheme.shapes.extraSmall).padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                }
+            }
+            if (note.isNotBlank()) Text(Fmt.iso(note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        if (size != null) Text(Fmt.iso(size), style = MaterialTheme.typography.labelMedium.merge(NumberStyle), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

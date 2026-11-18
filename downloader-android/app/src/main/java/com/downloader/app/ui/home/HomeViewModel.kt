@@ -66,6 +66,8 @@ data class HomeUi(
     val duplicate: HistoryEntry? = null,
     /** التنزيل بضغطة واحدة: التحليل الجاري سيتبعه تحميل تلقائي بالجودة الافتراضية. */
     val quick: Boolean = false,
+    /** الرابط حُلّل وننتظر أن يختار المستخدم الجودة من النافذة المنبثقة. */
+    val quickChoice: Boolean = false,
     /** مهمة التنزيل السريع الجارية (لعرض تقدّمها في الرئيسية). */
     val quickTaskId: String? = null,
     /** الملف الذي اكتمل تنزيله للتو (لعرض شاشة النتيجة). */
@@ -168,7 +170,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     /** إعادة فتح رابط من السجلّ في شاشة الخيارات (بلا تنزيل تلقائي). */
     fun openInOptions(text: String?) {
         val url = extractUrl(text) ?: return
-        _ui.update { it.copy(url = url, clipboardUrl = null, quick = false) }
+        _ui.update { it.copy(url = url, clipboardUrl = null, quick = false, quickChoice = false) }
         analyze()
     }
 
@@ -181,7 +183,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         viewModelScope.launch { settings.setLastClipboardUrl(url) }
-        _ui.update { it.copy(url = url, clipboardUrl = null, quick = true, resultItemId = null) }
+        _ui.update { it.copy(url = url, clipboardUrl = null, quick = true, quickChoice = false, resultItemId = null) }
         analyze()
     }
 
@@ -189,7 +191,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun quickCancel() {
         job?.cancel()
         _ui.value.quickTaskId?.let { DownloadManager.cancel(it) }
-        _ui.update { it.copy(quick = false, quickTaskId = null, state = HomeState.Idle, url = "") }
+        _ui.update { it.copy(quick = false, quickChoice = false, quickTaskId = null, state = HomeState.Idle, url = "") }
     }
 
     /** إغلاق شاشة النتيجة أو رسالة الخطأ والعودة للوضع الأول. */
@@ -211,8 +213,24 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.update { it.copy(quick = false) }
                 _events.tryEmit(HomeEvent.OpenOptions("حمّلت هذا من قبل"))
             }
+            // فيديو له أكثر من جودة أو يمكن تنزيله صوتاً: نعرض نافذة اختيار الجودة أولاً.
+            !info.isDirect && !info.viaGallery && (info.videoOptions.size > 1 || (info.videoOptions.isNotEmpty() && info.hasAudio)) ->
+                _ui.update { it.copy(quickChoice = true) }
             else -> download(quick = true)
         }
+    }
+
+    /** المستخدم اختار الجودة من النافذة المنبثقة وضغط «تنزيل». */
+    fun quickConfirm() {
+        if (!_ui.value.quickChoice) return
+        _ui.update { it.copy(quickChoice = false) }
+        download(quick = true)
+    }
+
+    /** من نافذة الجودة إلى شاشة الخيارات الكاملة (ترجمة، قصّ، مسار الصوت…) مع بقاء الرابط محلَّلاً. */
+    fun quickToOptions() {
+        _ui.update { it.copy(quick = false, quickChoice = false) }
+        _events.tryEmit(HomeEvent.OpenOptions(null))
     }
 
     fun analyze() {
