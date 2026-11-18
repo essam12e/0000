@@ -24,8 +24,8 @@ android {
         applicationId = "com.downloader.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
         // مهلة تحليل الرابط: 4 دقائق؛ أطول في نسخة المحاكي البرمجي لأنه أبطأ بعشرات المرات.
         buildConfigField("long", "ANALYZE_TIMEOUT_MS", if (emulatorAbi) "1800000L" else "240000L")
         // أدوات اختبار تُفعَّل في نسخة المحاكي فقط.
@@ -75,6 +75,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     val ytdl = "0.18.1"
     implementation("io.github.junkfood02.youtubedl-android:library:$ytdl")
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$ytdl")

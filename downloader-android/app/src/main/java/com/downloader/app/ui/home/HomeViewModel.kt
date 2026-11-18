@@ -21,6 +21,7 @@ import com.downloader.app.data.SettingsStore
 import com.downloader.app.data.extractUrl
 import com.downloader.app.engine.Direct
 import com.downloader.app.engine.GalleryDl
+import com.downloader.app.engine.Instagram
 import com.downloader.app.engine.DownloadManager
 import com.downloader.app.engine.Net
 import com.downloader.app.engine.SizeEstimate
@@ -162,7 +163,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         job = viewModelScope.launch {
             try {
                 if (!Net.isOnline(getApplication())) throw AppError(ErrorType.NO_INTERNET)
-                val info = Direct.probe(url) ?: try {
+                // ريلز ومنشورات انستجرام: مسار المتصفح الداخلي أولاً (يعمل بلا حساب)، ثم yt-dlp إن لم ينجح.
+                val info = Direct.probe(url) ?: Instagram.resolve(getApplication(), url) ?: try {
                     YtDlp.analyze(getApplication(), url)
                 } catch (e: AppError) {
                     // منشورات الصور وما لا يدعمه yt-dlp: نجرّب وسوم الصفحة نفسها.
@@ -193,7 +195,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AppError) {
-                Contact.lastError = listOfNotNull(e.type.message(), e.detail, url).joinToString("\n")
+                Contact.lastError = listOfNotNull(e.type.message(), e.detail, Instagram.lastDiagnosis, url).joinToString("\n")
                 if (isActive) _ui.update { it.copy(state = HomeState.Failed(e.type, e.detail)) }
             } catch (e: Throwable) {
                 if (isActive) _ui.update { it.copy(state = HomeState.Failed(ErrorType.GENERIC, e.message)) }

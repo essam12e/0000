@@ -25,3 +25,6 @@
 -keep class com.google.firebase.components.** { *; }
 -keep class * implements com.google.firebase.components.ComponentRegistrar { *; }
 -dontwarn com.google.mlkit.**
+
+# جسر WebView لمسار انستجرام: الدالة تُستدعى بالاسم من داخل الصفحة.
+-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }

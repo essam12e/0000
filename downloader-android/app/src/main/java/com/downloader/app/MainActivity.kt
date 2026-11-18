@@ -84,6 +84,9 @@ class MainActivity : ComponentActivity() {
                 val r = com.downloader.app.engine.Subtitles.finalize(this, spec, dir) { android.util.Log.e("Downloader", "TEST stage: $it") }
                 android.util.Log.e("Downloader", "TEST subs: videos=${r.videos} platform=${r.platform} translated=${r.translated} original=${r.original} notice=${r.notice()} files=${dir.list()?.toList()}")
             }.start()
+            // اختبار فقط (نسخة المحاكي): توجيه مسار انستجرام إلى خادم محلي يحاكي صفحاته.
+            BuildConfig.EMULATOR_TEST && intent?.action == "com.downloader.app.TEST_IG_BASE" ->
+                com.downloader.app.engine.Instagram.baseOverride = intent.getStringExtra("base")
             // اختبار فقط (نسخة المحاكي): صورة النظام بلا منتقي مجلدات، فنستقبل مجلداً مُنح إذنه عبر adb.
             BuildConfig.EMULATOR_TEST && intent?.action == "com.downloader.app.TEST_SET_TREE" ->
                 intent.data?.let { uri ->

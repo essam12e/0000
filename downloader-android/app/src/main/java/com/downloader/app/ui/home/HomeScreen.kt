@@ -562,7 +562,7 @@ private fun DirectSummary(info: MediaInfo) {
                     style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    listOfNotNull(f.fileName.substringAfterLast('.', "").uppercase().takeIf { it.isNotEmpty() && it.length <= 5 }, "بالجودة الأصلية").joinToString("  ·  ") { Fmt.iso(it) },
+                    listOfNotNull(info.directFiles.size.takeIf { it > 1 }?.let { "$it ملفات" }, f.fileName.substringAfterLast('.', "").uppercase().takeIf { it.isNotEmpty() && it.length <= 5 }, "بالجودة الأصلية").joinToString("  ·  ") { Fmt.iso(it) },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
