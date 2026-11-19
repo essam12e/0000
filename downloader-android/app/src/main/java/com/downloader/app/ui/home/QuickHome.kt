@@ -93,12 +93,14 @@ import com.downloader.app.ui.components.RoundIconButton
 import com.downloader.app.ui.components.Thumb
 import com.downloader.app.ui.library.kindIcon
 import com.downloader.app.ui.library.kindName
+import com.downloader.app.ui.motion.enter3d
+import com.downloader.app.ui.motion.parallax
+import com.downloader.app.ui.motion.pressTilt
+import com.downloader.app.ui.motion.rememberTilt
+import androidx.compose.runtime.State
 import com.downloader.app.ui.theme.AppTheme
 import com.downloader.app.ui.theme.NumberStyle
 import java.io.File
-
-/** لون النص فوق الكرة الداكنة (ثابت في المظهرين لأن الكرة داكنة دائماً). */
-private val OnOrb = Color(0xFFEFE9DC)
 
 /**
  * الرئيسية: زر واحد كبير. ينسخ المستخدم الرابط ثم يضغط، فيُحلَّل الرابط ويُنزَّل بالجودة الافتراضية،
@@ -122,6 +124,7 @@ fun QuickHome(
     val items by Library.items.collectAsStateWithLifecycle()
     val task = tasks.firstOrNull { it.id == ui.quickTaskId }
     val result = items.firstOrNull { it.id == ui.resultItemId }
+    val tilt = rememberTilt()
 
     // المهمة أُلغيت من مكان آخر (مثلاً من المكتبة): نعود للوضع الأول.
     LaunchedEffect(ui.quickTaskId, task == null) {
@@ -138,7 +141,7 @@ fun QuickHome(
     ) { done ->
         if (done != null) {
             ResultView(
-                done, bottomInset, saving = done.id in saving, onClose = vm::quickReset,
+                done, bottomInset, tilt, saving = done.id in saving, onClose = vm::quickReset,
                 onPlay = { onPlay(done) }, onShare = { onShare(done) }, onSave = { onSave(done) },
                 onTrim = { onTrim(done) }, onOpenLibrary = { vm.quickReset(); onOpenLibrary() },
             )
@@ -164,17 +167,17 @@ fun QuickHome(
                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).heightIn(min = viewport).padding(top = 56.dp, bottom = bottomInset),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
             ) {
-                Text("داونلودر", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+                Text("داونلودر", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.enter3d(1).parallax(tilt, degrees = 0f, depth = -6f))
                 Text(
                     "DOWNLOADER", style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 6.sp, fontWeight = FontWeight.Medium),
-                    color = AppTheme.extra.dim, modifier = Modifier.padding(top = 2.dp),
+                    color = AppTheme.extra.dim, modifier = Modifier.padding(top = 2.dp).enter3d(3).parallax(tilt, degrees = 0f, depth = -6f),
                 )
-                Spacer(Modifier.height(44.dp))
+                Spacer(Modifier.height(22.dp))
                 Orb(
                     progress = progress, paused = task != null && task.state != TaskState.RUNNING && task.state != TaskState.QUEUED,
-                    enabled = progress == null && failed == null && !ui.quickChoice, onClick = { vm.quickStart() },
+                    enabled = progress == null && failed == null && !ui.quickChoice, tilt = tilt, onClick = { vm.quickStart() },
                 )
-                Spacer(Modifier.height(34.dp))
+                Spacer(Modifier.height(12.dp))
                 val phase = when {
                     failed != null -> "error"
                     task != null && task.state == TaskState.FAILED -> "task-failed"
@@ -186,7 +189,7 @@ fun QuickHome(
                 }
                 AnimatedContent(
                     phase, transitionSpec = { (fadeIn(tween(260)) + slideInVertically(tween(260)) { it / 6 }) togetherWith fadeOut(tween(120)) },
-                    label = "phase", modifier = Modifier.fillMaxWidth(),
+                    label = "phase", modifier = Modifier.fillMaxWidth().enter3d(6),
                 ) { p ->
                     Column(Modifier.fillMaxWidth().padding(horizontal = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         when (p) {
@@ -286,8 +289,9 @@ private fun QualityPopup(
             Text("اختر الجودة — يبدأ التنزيل فوراً", style = MaterialTheme.typography.labelMedium, color = AppTheme.extra.dim)
             Spacer(Modifier.height(8.dp))
             Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                info.videoOptions.forEach { o ->
+                info.videoOptions.forEachIndexed { n, o ->
                     ChoiceRow(
+                        modifier = Modifier.enter3d(n + 1, key = info.sourceUrl),
                         title = o.label, badge = o.badge, note = o.detail,
                         size = if (o.sizeBytes != null) Fmt.bytes(o.sizeBytes) else null,
                         selected = false, onClick = { onSelect(o.id) },
@@ -295,6 +299,7 @@ private fun QualityPopup(
                 }
                 if (info.hasAudio) {
                     ChoiceRow(
+                        modifier = Modifier.enter3d(info.videoOptions.size + 1, key = info.sourceUrl),
                         title = "صوت فقط", badge = ui.audioFormat.uppercase(), note = "بدون فيديو",
                         size = info.audioSizeBytes?.let { Fmt.bytes(it) }, selected = false, onClick = onAudio,
                     )
@@ -311,10 +316,10 @@ private fun QualityPopup(
 }
 
 @Composable
-private fun ChoiceRow(title: String, badge: String?, note: String, size: String?, selected: Boolean, onClick: () -> Unit) {
+private fun ChoiceRow(title: String, badge: String?, note: String, size: String?, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val gold = AppTheme.extra.gold
     Row(
-        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+        modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
             .background(if (selected) gold.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceContainerHigh)
             .then(Modifier.border(if (selected) 1.5.dp else 1.dp, if (selected) gold.copy(alpha = 0.85f) else MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium))
             .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 14.dp, vertical = 11.dp),
@@ -420,69 +425,10 @@ private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * الكرة: [progress] = null في السكون، قيمة سالبة = تقدّم غير محدد (حلقة تدور)، وإلا نسبة من 0 إلى 1.
- */
-@Composable
-private fun Orb(progress: Float?, paused: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val extra = AppTheme.extra
-    val track = MaterialTheme.colorScheme.outline
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val press by animateFloatAsState(if (pressed) 0.95f else 1f, spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium), label = "press")
-    val infinite = rememberInfiniteTransition(label = "orb")
-    val breathe by infinite.animateFloat(1f, 1.035f, infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "breathe")
-    val spin by infinite.animateFloat(0f, 360f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "spin")
-    val shown by animateFloatAsState((progress ?: 0f).coerceIn(0f, 1f), tween(350), label = "progress")
-    val ring by animateFloatAsState(if (progress != null) 1f else 0f, tween(400), label = "ring")
-    val idle = progress == null
-
-    Box(
-        Modifier.size(248.dp).clip(CircleShape)
-            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClickLabel = "اضغط للتنزيل", onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.fillMaxSize().graphicsLayer { val s = press * if (idle) breathe else 1f; scaleX = s; scaleY = s }) {
-            val c = center
-            val r = size.minDimension * 0.355f
-            // هالة ذهبية خافتة جداً
-            drawCircle(Brush.radialGradient(listOf(extra.gold.copy(alpha = 0.16f), Color.Transparent), center = c, radius = size.minDimension * 0.5f), radius = size.minDimension * 0.5f)
-            // الكرة: إضاءة من أعلى اليسار
-            drawCircle(
-                Brush.radialGradient(
-                    listOf(Color(0xFF45454C), Color(0xFF1B1B1E), Color(0xFF060607)),
-                    center = Offset(c.x - r * 0.38f, c.y - r * 0.46f), radius = r * 1.75f,
-                ),
-                radius = r, center = c,
-            )
-            drawCircle(extra.gold.copy(alpha = 0.28f), radius = r, center = c, style = Stroke(1.dp.toPx()))
-            // حلقة التقدّم
-            if (ring > 0f) {
-                val rr = size.minDimension * 0.455f
-                val stroke = 3.5.dp.toPx()
-                drawCircle(track.copy(alpha = ring), radius = rr, center = c, style = Stroke(1.5.dp.toPx()))
-                val topLeft = Offset(c.x - rr, c.y - rr)
-                val arc = Size(rr * 2, rr * 2)
-                val p = progress ?: 0f
-                if (p < 0f) drawArc(extra.goldBrush, startAngle = spin - 90f, sweepAngle = 80f, useCenter = false, topLeft = topLeft, size = arc, style = Stroke(stroke, cap = StrokeCap.Round), alpha = ring)
-                else if (shown > 0.003f) drawArc(extra.goldBrush, startAngle = -90f, sweepAngle = 360f * shown, useCenter = false, topLeft = topLeft, size = arc, style = Stroke(stroke, cap = StrokeCap.Round), alpha = if (paused) 0.45f else ring)
-            }
-        }
-        if (idle) {
-            Icon(Icons.Rounded.ArrowDownward, null, tint = extra.gold.copy(alpha = 0.92f), modifier = Modifier.size(46.dp))
-        } else if ((progress ?: -1f) >= 0f) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text("${(shown * 100).toInt()}", style = NumberStyle.copy(fontSize = 46.sp, lineHeight = 52.sp, fontWeight = FontWeight.ExtraBold), color = OnOrb)
-                Text("%", style = NumberStyle.copy(fontSize = 18.sp), color = OnOrb.copy(alpha = 0.6f), modifier = Modifier.padding(bottom = 9.dp, start = 3.dp))
-            }
-        }
-    }
-}
-
 /** شاشة النتيجة بعد اكتمال التنزيل أو القصّ. */
 @Composable
 private fun ResultView(
-    item: LibraryItem, bottomInset: Dp, saving: Boolean, onClose: () -> Unit,
+    item: LibraryItem, bottomInset: Dp, tilt: State<Offset>, saving: Boolean, onClose: () -> Unit,
     onPlay: () -> Unit, onShare: () -> Unit, onSave: () -> Unit, onTrim: () -> Unit, onOpenLibrary: () -> Unit,
 ) {
     Column(
@@ -497,7 +443,8 @@ private fun ResultView(
             RoundIconButton(Icons.Rounded.Close, "إغلاق", onClose)
         }
         Spacer(Modifier.height(6.dp))
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 10f).clip(MaterialTheme.shapes.large).clickable(onClick = onPlay), contentAlignment = Alignment.Center) {
+        // بطاقة المعاينة مجسّمة: تنقلب عند الدخول، تميل مع الجوال، وتميل نحو الإصبع عند اللمس.
+        Box(Modifier.fillMaxWidth().enter3d(0, key = item.id, fromDegrees = -78f).parallax(tilt, degrees = 9f, depth = 5f).pressTilt().aspectRatio(16f / 10f).clip(MaterialTheme.shapes.large).clickable(onClick = onPlay), contentAlignment = Alignment.Center) {
             val model: Any? = when (item.kind) {
                 MediaKind.IMAGE, MediaKind.VIDEO -> File(item.path)
                 else -> item.thumbUrl
@@ -510,7 +457,7 @@ private fun ResultView(
             }
         }
         Spacer(Modifier.height(18.dp))
-        Text(item.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(item.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.enter3d(2, key = item.id))
         Text(
             listOfNotNull(kindName(item.kind), Fmt.bytes(item.size), Fmt.duration(item.durationSec)).joinToString("  ·  ") { Fmt.iso(it) },
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp),
@@ -520,11 +467,11 @@ private fun ResultView(
             color = AppTheme.extra.dim, modifier = Modifier.padding(top = 6.dp),
         )
         Spacer(Modifier.height(22.dp))
-        GoldButton("مشاركة", onShare, Modifier.fillMaxWidth(), icon = Icons.Rounded.Share)
+        GoldButton("مشاركة", onShare, Modifier.fillMaxWidth().enter3d(4, key = item.id), icon = Icons.Rounded.Share)
         Spacer(Modifier.height(10.dp))
-        QuietButton("حفظ في الجهاز", onSave, Modifier.fillMaxWidth(), icon = Icons.Rounded.SaveAlt, loading = saving)
+        QuietButton("حفظ في الجهاز", onSave, Modifier.fillMaxWidth().enter3d(5, key = item.id), icon = Icons.Rounded.SaveAlt, loading = saving)
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.enter3d(6, key = item.id), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (item.kind == MediaKind.VIDEO) QuietButton(if (item.clip) "قصّ مقطعاً آخر" else "قصّ مقطع", onTrim, Modifier.weight(1f), icon = Icons.Rounded.ContentCut, compact = true)
             QuietButton("عرض في المكتبة", onOpenLibrary, Modifier.weight(1f), icon = Icons.Rounded.Layers, compact = true)
         }

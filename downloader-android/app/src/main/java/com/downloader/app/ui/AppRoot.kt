@@ -11,6 +11,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.graphicsLayer
+import com.downloader.app.ui.motion.enter3d
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -194,6 +197,15 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
             transitionSpec = { (fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.985f)) togetherWith fadeOut(tween(120)) },
             label = "tab",
         ) { current ->
+            // الانتقال بين التبويبات: الصفحة تدور قليلاً حول محورها الرأسي وهي تدخل وتخرج.
+            val turn by transition.animateFloat(transitionSpec = { tween(420, easing = com.downloader.app.ui.motion.ExpoOut) }, label = "turn") { state ->
+                when (state) {
+                    androidx.compose.animation.EnterExitState.PreEnter -> 1f
+                    androidx.compose.animation.EnterExitState.Visible -> 0f
+                    androidx.compose.animation.EnterExitState.PostExit -> -1f
+                }
+            }
+            Box(Modifier.fillMaxSize().graphicsLayer { rotationY = turn * -16f; translationX = turn * -size.width * 0.06f; cameraDistance = 22f * density * 16f }) {
             when (current) {
                 Tab.HOME -> QuickHome(
                     homeVm, bottomInset, saving = saving,
@@ -214,12 +226,13 @@ fun AppRoot(tabState: MutableState<Tab>, homeVm: HomeViewModel) {
                 )
                 Tab.SETTINGS -> SettingsScreen(settingsVm, bottomInset, onOpenLogin = { showLogin = true })
             }
+            }
         }
 
         BottomBar(
             tab, { tab = it },
             activeCount = tasks.count { it.state == TaskState.RUNNING || it.state == TaskState.QUEUED },
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomCenter).enter3d(7, fromDegrees = 80f),
         )
 
         // شاشة الخيارات الكاملة (الجودات، الترجمة، القوائم…): تُفتح من زر الخيارات أو عندما يحتاج الرابط اختياراً.

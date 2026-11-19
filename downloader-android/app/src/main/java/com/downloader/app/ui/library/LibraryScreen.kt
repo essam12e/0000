@@ -93,6 +93,7 @@ import com.downloader.app.ui.components.RoundIconButton
 import com.downloader.app.ui.components.SectionLabel
 import com.downloader.app.ui.components.Thumb
 import com.downloader.app.ui.theme.AppTheme
+import com.downloader.app.ui.motion.enter3d
 import com.downloader.app.ui.theme.NumberStyle
 import java.io.File
 
@@ -262,7 +263,7 @@ fun LibraryScreen(
                             onShare = { shareItem(context, item) },
                             onRename = { renaming = item },
                             onDelete = { confirmDelete = listOf(item) },
-                            modifier = Modifier.animateItem(),
+                            modifier = Modifier.animateItem().enter3d(items.indexOf(item).coerceAtMost(7), key = item.id),
                         )
                     }
                     if (items.isEmpty()) item("no-results") {
