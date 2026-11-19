@@ -10,7 +10,7 @@ const FPS = 30;
   const b = await chromium.launch({ args: ['--allow-file-access-from-files'] });
   const p = await b.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
   p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-  await p.goto('file://' + path.join(__dirname, 'reel.html'));
+  await p.goto('file://' + path.join(__dirname, process.env.REEL || 'reel.html'));
   await p.evaluate(() => document.fonts.ready);
   const dur = await p.evaluate(() => window.DURATION);
   if (flag === '--still') {
