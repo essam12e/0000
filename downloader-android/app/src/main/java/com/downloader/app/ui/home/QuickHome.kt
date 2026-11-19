@@ -286,7 +286,7 @@ private fun QualityPopup(
                 RoundIconButton(Icons.Rounded.Close, "إغلاق", onClose, Modifier.size(38.dp))
             }
             Spacer(Modifier.height(16.dp))
-            Text("اختر الجودة — يبدأ التنزيل فوراً", style = MaterialTheme.typography.labelMedium, color = AppTheme.extra.dim)
+            Text(if (ui.duplicate != null) "حمّلت هذا من قبل — اختر الجودة لتنزيله مجدداً" else "اختر الجودة — يبدأ التنزيل فوراً", style = MaterialTheme.typography.labelMedium, color = if (ui.duplicate != null) AppTheme.extra.gold else AppTheme.extra.dim)
             Spacer(Modifier.height(8.dp))
             Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 info.videoOptions.forEachIndexed { n, o ->

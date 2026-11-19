@@ -24,8 +24,8 @@ android {
         applicationId = "com.downloader.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 10
-        versionName = "2.1"
+        versionCode = 11
+        versionName = "2.2"
         // مهلة تحليل الرابط: 4 دقائق؛ أطول في نسخة المحاكي البرمجي لأنه أبطأ بعشرات المرات.
         buildConfigField("long", "ANALYZE_TIMEOUT_MS", if (emulatorAbi) "1800000L" else "240000L")
         // أدوات اختبار تُفعَّل في نسخة المحاكي فقط.

@@ -209,14 +209,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.update { it.copy(quick = false) }
                 _events.tryEmit(HomeEvent.OpenOptions(null))
             }
-            _ui.value.duplicate != null -> {
-                _ui.update { it.copy(quick = false) }
-                _events.tryEmit(HomeEvent.OpenOptions("حمّلت هذا من قبل"))
-            }
             // فيديو له أكثر من جودة أو يمكن تنزيله صوتاً: نعرض نافذة اختيار الجودة أولاً.
             !info.isDirect && !info.viaGallery && (info.videoOptions.size > 1 || (info.videoOptions.isNotEmpty() && info.hasAudio)) ->
                 _ui.update { it.copy(quickChoice = true) }
-            else -> download(quick = true)
+            // ضغط المستخدم للتنزيل صراحةً، فلا نوقفه بسؤال «حمّلته من قبل» (النافذة تذكر ذلك إن ظهرت).
+            else -> download(force = true, quick = true)
         }
     }
 
@@ -224,7 +221,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun quickConfirm() {
         if (!_ui.value.quickChoice) return
         _ui.update { it.copy(quickChoice = false) }
-        download(quick = true)
+        download(force = true, quick = true)
     }
 
     /** من نافذة الجودة إلى شاشة الخيارات الكاملة (ترجمة، قصّ، مسار الصوت…) مع بقاء الرابط محلَّلاً. */
